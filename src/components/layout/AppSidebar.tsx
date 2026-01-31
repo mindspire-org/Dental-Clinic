@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -44,6 +44,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { authApi, dashboardApi, labWorkApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface NavItem {
   title: string;
@@ -54,7 +56,30 @@ interface NavItem {
   children?: { title: string; url: string }[];
 }
 
+const moduleKeyByTitle: Record<string, string> = {
+  Dashboard: 'dashboard',
+  Patients: 'patients',
+  Appointments: 'appointments',
+  'Dental Chart': 'dental-chart',
+  Treatments: 'treatments',
+  Prescriptions: 'prescriptions',
+  'Lab Work': 'lab-work',
+  Billing: 'billing',
+  Inventory: 'inventory',
+  Staff: 'staff',
+  Dentists: 'dentists',
+  Reports: 'reports',
+  Documents: 'documents',
+  Settings: 'settings',
+};
+
 const navItems: NavItem[] = [
+  {
+    title: 'License',
+    url: '/license',
+    icon: Settings,
+    roles: ['superadmin']
+  },
   {
     title: 'Dashboard',
     url: '/',
@@ -65,7 +90,6 @@ const navItems: NavItem[] = [
     title: 'Patients',
     url: '/patients',
     icon: Users,
-    badge: '2.4k',
     roles: ['admin', 'dentist', 'receptionist'],
     children: [
       { title: 'All Patients', url: '/patients' },
@@ -77,7 +101,6 @@ const navItems: NavItem[] = [
     title: 'Appointments',
     url: '/appointments',
     icon: Calendar,
-    badge: '12',
     roles: ['admin', 'dentist', 'receptionist'],
     children: [
       { title: 'Calendar View', url: '/appointments' },
@@ -121,7 +144,11 @@ const navItems: NavItem[] = [
     icon: CreditCard,
     roles: ['admin', 'receptionist'],
     children: [
-      { title: 'Invoices', url: '/billing' },
+      { title: 'Checkup', url: '/billing/checkup' },
+      { title: 'Procedure', url: '/billing/procedure' },
+      { title: 'Lab', url: '/billing/lab' },
+      { title: 'Prescription', url: '/billing/prescription' },
+      { title: 'Expenses', url: '/billing/expenses' },
       { title: 'Payments', url: '/billing/payments' },
       { title: 'Insurance', url: '/billing/insurance' }
     ]
@@ -144,14 +171,18 @@ const navItems: NavItem[] = [
     roles: ['admin']
   },
   {
+    title: 'Dentists',
+    url: '/dentists',
+    icon: Stethoscope,
+    roles: ['admin']
+  },
+  {
     title: 'Reports',
     url: '/reports',
     icon: BarChart3,
     roles: ['admin'],
     children: [
       { title: 'Financial', url: '/reports' },
-      { title: 'Clinical', url: '/reports/clinical' },
-      { title: 'Performance', url: '/reports/performance' }
     ]
   },
   {
@@ -161,8 +192,8 @@ const navItems: NavItem[] = [
     roles: ['admin', 'dentist', 'receptionist']
   },
   {
-    title: 'Login',
-    url: '/login',
+    title: 'Logout',
+    url: '/logout',
     icon: LogOut,
     roles: ['admin', 'dentist', 'receptionist']
   },
@@ -178,7 +209,56 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const location = useLocation();
-  const { role, setRole, userName } = useRole();
+  const navigate = useNavigate();
+  const { role, authRole, canSwitchRole, setRole, userName, permissions, license, resetAuth } = useRole();
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore
+    }
+    localStorage.removeItem('token');
+    toast.success('Logged out');
+    resetAuth();
+    navigate('/login');
+  };
+
+  const [counts, setCounts] = useState<{ patients?: number; appointmentsToday?: number; labWorkOpen?: number } | null | undefined>(undefined);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadCounts = async () => {
+      try {
+        if (authRole === 'admin' && !permissions.includes('dashboard')) {
+          setCounts(null);
+          return;
+        }
+        if (authRole !== 'superadmin' && license?.isActive && Array.isArray(license?.enabledModules) && !license.enabledModules.includes('dashboard')) {
+          setCounts(null);
+          return;
+        }
+        const [statsRes, labRes] = await Promise.all([
+          dashboardApi.getStats(),
+          labWorkApi.getSummary?.() ?? Promise.resolve(null as any),
+        ]);
+        if (!isMounted) return;
+        setCounts({
+          patients: statsRes?.data?.totalPatients,
+          appointmentsToday: statsRes?.data?.appointmentsToday,
+          labWorkOpen: labRes?.data?.openCount,
+        });
+      } catch {
+        if (!isMounted) return;
+        setCounts(null);
+      }
+    };
+
+    loadCounts();
+    return () => {
+      isMounted = false;
+    };
+  }, [authRole, license?.isActive, license?.enabledModules, permissions, role]);
 
   // Initialize expanded items based on current active route
   const [expandedItems, setExpandedItems] = useState<string[]>(() => {
@@ -188,7 +268,17 @@ export function AppSidebar() {
     return activeItem ? [activeItem.title] : [];
   });
 
-  const filteredItems = navItems.filter(item => item.roles.includes(role));
+  const filteredItems = navItems
+    .filter(item => item.roles.includes(role))
+    .filter((item) => {
+      if (role === 'superadmin') return true;
+      if (!license?.isActive) return item.title === 'Logout';
+      const key = moduleKeyByTitle[item.title];
+      if (key && Array.isArray(license?.enabledModules) && !license.enabledModules.includes(key)) return false;
+      if (role !== 'admin') return true;
+      if (!key) return true;
+      return permissions.includes(key);
+    });
 
   const isActive = (url: string) => location.pathname === url;
   const isParentActive = (item: NavItem) => {
@@ -204,13 +294,31 @@ export function AppSidebar() {
     );
   };
 
+  const getBadgeText = (item: NavItem) => {
+    if (item.title === 'Patients') {
+      if (counts?.patients !== undefined) return String(counts.patients);
+      return counts === null ? undefined : '...';
+    }
+    if (item.title === 'Appointments') {
+      if (counts?.appointmentsToday !== undefined) return String(counts.appointmentsToday);
+      return counts === null ? undefined : '...';
+    }
+    if (item.title === 'Lab Work') {
+      if (counts?.labWorkOpen !== undefined) return String(counts.labWorkOpen);
+      return counts === null ? undefined : '...';
+    }
+    return item.badge;
+  };
+
   const roleColors: Record<UserRole, string> = {
+    superadmin: 'bg-warning/20 text-warning',
     admin: 'bg-primary/20 text-primary',
     dentist: 'bg-info/20 text-info',
     receptionist: 'bg-success/20 text-success'
   };
 
   const roleLabels: Record<UserRole, string> = {
+    superadmin: 'Super Admin',
     admin: 'Administrator',
     dentist: 'Dentist',
     receptionist: 'Receptionist'
@@ -261,9 +369,9 @@ export function AppSidebar() {
                         </div>
                         {!collapsed && (
                           <div className="flex items-center gap-2">
-                            {item.badge && (
+                            {getBadgeText(item) && (
                               <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-sidebar-primary/20 text-sidebar-primary border-0">
-                                {item.badge}
+                                {getBadgeText(item)}
                               </Badge>
                             )}
                             {expandedItems.includes(item.title) ? (
@@ -295,26 +403,44 @@ export function AppSidebar() {
                     </div>
                   ) : (
                     <SidebarMenuButton asChild>
-                      <Link
-                        to={item.url}
-                        className={cn(
-                          'flex items-center gap-3 transition-all duration-200',
-                          isActive(item.url)
-                            ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-glow'
-                            : 'hover:bg-sidebar-accent'
-                        )}
-                      >
-                        <item.icon className={cn(
-                          'w-5 h-5',
-                          isActive(item.url) ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/70'
-                        )} />
-                        {!collapsed && <span>{item.title}</span>}
-                        {!collapsed && item.badge && (
-                          <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs bg-sidebar-primary/20 text-sidebar-primary border-0">
-                            {item.badge}
-                          </Badge>
-                        )}
-                      </Link>
+                      {item.title === 'Logout' ? (
+                        <button
+                          type="button"
+                          onClick={handleLogout}
+                          className={cn(
+                            'flex w-full items-center gap-3 transition-all duration-200',
+                            'hover:bg-sidebar-accent',
+                            isActive(item.url) && 'bg-sidebar-primary text-sidebar-primary-foreground shadow-glow'
+                          )}
+                        >
+                          <item.icon className={cn(
+                            'w-5 h-5',
+                            isActive(item.url) ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/70'
+                          )} />
+                          {!collapsed && <span>{item.title}</span>}
+                        </button>
+                      ) : (
+                        <Link
+                          to={item.url}
+                          className={cn(
+                            'flex items-center gap-3 transition-all duration-200',
+                            isActive(item.url)
+                              ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-glow'
+                              : 'hover:bg-sidebar-accent'
+                          )}
+                        >
+                          <item.icon className={cn(
+                            'w-5 h-5',
+                            isActive(item.url) ? 'text-sidebar-primary-foreground' : 'text-sidebar-foreground/70'
+                          )} />
+                          {!collapsed && <span>{item.title}</span>}
+                          {!collapsed && getBadgeText(item) && (
+                            <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs bg-sidebar-primary/20 text-sidebar-primary border-0">
+                              {getBadgeText(item)}
+                            </Badge>
+                          )}
+                        </Link>
+                      )}
                     </SidebarMenuButton>
                   )}
                 </SidebarMenuItem>
@@ -349,19 +475,28 @@ export function AppSidebar() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 bg-popover">
-            <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => setRole('admin')} className={role === 'admin' ? 'bg-muted' : ''}>
-              <UserCog className="mr-2 h-4 w-4" /> Administrator
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setRole('dentist')} className={role === 'dentist' ? 'bg-muted' : ''}>
-              <Stethoscope className="mr-2 h-4 w-4" /> Dentist
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setRole('receptionist')} className={role === 'receptionist' ? 'bg-muted' : ''}>
-              <ClipboardList className="mr-2 h-4 w-4" /> Receptionist
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">
+            {canSwitchRole ? (
+              <>
+                <DropdownMenuLabel>Switch Role</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setRole('admin')} className={role === 'admin' ? 'bg-muted' : ''}>
+                  <UserCog className="mr-2 h-4 w-4" /> Administrator
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRole('dentist')} className={role === 'dentist' ? 'bg-muted' : ''}>
+                  <Stethoscope className="mr-2 h-4 w-4" /> Dentist
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setRole('receptionist')} className={role === 'receptionist' ? 'bg-muted' : ''}>
+                  <ClipboardList className="mr-2 h-4 w-4" /> Receptionist
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : (
+              <>
+                <DropdownMenuLabel>Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+              </>
+            )}
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" /> Log Out
             </DropdownMenuItem>
           </DropdownMenuContent>

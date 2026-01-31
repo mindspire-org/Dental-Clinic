@@ -16,7 +16,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <AppSidebar />
           <SidebarInset className="flex flex-col flex-1">
             <Header />
-            <main className="flex-1 p-6 overflow-auto">
+            <main className="flex-1 p-6 overflow-auto scrollbar-none">
               {children}
             </main>
           </SidebarInset>

@@ -4,6 +4,26 @@ const Treatment = require('../models/Treatment');
 const Billing = require('../models/Billing');
 const { paginate, getPaginationMeta } = require('../utils/helpers');
 
+const getDentistPatientIds = async (dentistId) => {
+    const LabWork = require('../models/LabWork');
+    const Prescription = require('../models/Prescription');
+
+    const [fromAppointments, fromTreatments, fromLabWork, fromPrescriptions] = await Promise.all([
+        Appointment.find({ dentist: dentistId }).distinct('patient'),
+        Treatment.find({ dentist: dentistId }).distinct('patient'),
+        LabWork.find({ dentist: dentistId }).distinct('patient'),
+        Prescription.find({ dentist: dentistId }).distinct('patient'),
+    ]);
+
+    const ids = new Set([
+        ...fromAppointments.map(String),
+        ...fromTreatments.map(String),
+        ...fromLabWork.map(String),
+        ...fromPrescriptions.map(String),
+    ]);
+    return Array.from(ids);
+};
+
 exports.getAllPatients = async (req, res, next) => {
     try {
         const { page = 1, limit = 10, search } = req.query;
@@ -11,6 +31,12 @@ exports.getAllPatients = async (req, res, next) => {
 
         if (search) {
             query = { $text: { $search: search } };
+        }
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            const dentistFilter = { _id: { $in: allowedIds } };
+            query = Object.keys(query).length ? { $and: [dentistFilter, query] } : dentistFilter;
         }
 
         const patientsQuery = Patient.find(query).sort({ createdAt: -1 });
@@ -31,6 +57,16 @@ exports.getAllPatients = async (req, res, next) => {
 
 exports.getPatientById = async (req, res, next) => {
     try {
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(req.params.id))) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Patient not found',
+                });
+            }
+        }
+
         const patient = await Patient.findById(req.params.id);
         if (!patient) {
             return res.status(404).json({
@@ -107,9 +143,13 @@ exports.searchPatients = async (req, res, next) => {
         const { q } = req.query;
         if (!q) return res.status(200).json({ status: 'success', data: { patients: [] } });
 
-        const patients = await Patient.find({
-            $text: { $search: q }
-        }).limit(10);
+        let query = { $text: { $search: q } };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            query = { $and: [{ _id: { $in: allowedIds } }, query] };
+        }
+
+        const patients = await Patient.find(query).limit(10);
 
         res.status(200).json({
             status: 'success',
@@ -122,7 +162,12 @@ exports.searchPatients = async (req, res, next) => {
 
 exports.getPatientAppointments = async (req, res, next) => {
     try {
-        const appointments = await Appointment.find({ patient: req.params.id })
+        const query = { patient: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const appointments = await Appointment.find(query)
             .populate('dentist', 'firstName lastName')
             .sort({ appointmentDate: -1 });
 
@@ -137,8 +182,14 @@ exports.getPatientAppointments = async (req, res, next) => {
 
 exports.getPatientTreatments = async (req, res, next) => {
     try {
-        const treatments = await Treatment.find({ patient: req.params.id })
-            .populate('dentist', 'firstName lastName')
+        const query = { patient: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const treatments = await Treatment.find(query)
+            .populate('dentist', 'firstName lastName checkupFee')
+            .populate('procedure', 'name price')
             .sort({ startDate: -1 });
 
         res.status(200).json({
@@ -152,8 +203,31 @@ exports.getPatientTreatments = async (req, res, next) => {
 
 exports.getPatientBilling = async (req, res, next) => {
     try {
-        const bills = await Billing.find({ patient: req.params.id })
-            .sort({ createdAt: -1 });
+        let query = { patient: req.params.id };
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const LabWork = require('../models/LabWork');
+            const Prescription = require('../models/Prescription');
+
+            const [appointmentIds, treatmentIds, labWorkIds, prescriptionIds] = await Promise.all([
+                Appointment.find({ dentist: req.user._id, patient: req.params.id }).distinct('_id'),
+                Treatment.find({ dentist: req.user._id, patient: req.params.id }).distinct('_id'),
+                LabWork.find({ dentist: req.user._id, patient: req.params.id }).distinct('_id'),
+                Prescription.find({ dentist: req.user._id, patient: req.params.id }).distinct('_id'),
+            ]);
+
+            query = {
+                patient: req.params.id,
+                $or: [
+                    { appointment: { $in: appointmentIds } },
+                    { treatment: { $in: treatmentIds } },
+                    { labWork: { $in: labWorkIds } },
+                    { prescription: { $in: prescriptionIds } },
+                ],
+            };
+        }
+
+        const bills = await Billing.find(query).sort({ createdAt: -1 });
 
         res.status(200).json({
             status: 'success',

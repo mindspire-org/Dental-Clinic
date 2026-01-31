@@ -7,6 +7,10 @@ const authorize = (...roles) => {
             });
         }
 
+        if (req.user.role === 'superadmin') {
+            return next();
+        }
+
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 status: 'error',

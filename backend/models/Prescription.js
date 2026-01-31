@@ -18,7 +18,6 @@ const prescriptionSchema = new mongoose.Schema({
     prescriptionNumber: {
         type: String,
         unique: true,
-        required: true,
     },
     medications: [{
         name: {
@@ -38,6 +37,21 @@ const prescriptionSchema = new mongoose.Schema({
             required: [true, 'Duration is required'],
         },
         instructions: String,
+        unitPrice: {
+            type: Number,
+            min: 0,
+            default: 0,
+        },
+        quantity: {
+            type: Number,
+            min: 1,
+            default: 1,
+        },
+        totalPrice: {
+            type: Number,
+            min: 0,
+            default: 0,
+        },
     }],
     instructions: String,
     prescriptionDate: {
@@ -50,12 +64,26 @@ const prescriptionSchema = new mongoose.Schema({
         enum: ['active', 'completed', 'cancelled'],
         default: 'active',
     },
+    invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Billing',
+    },
+    totalCost: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    paidAmount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
 }, {
     timestamps: true,
 });
 
 // Auto-generate prescription number
-prescriptionSchema.pre('save', async function (next) {
+prescriptionSchema.pre('validate', async function (next) {
     if (!this.prescriptionNumber) {
         const count = await mongoose.model('Prescription').countDocuments();
         this.prescriptionNumber = `RX${String(count + 1).padStart(6, '0')}`;

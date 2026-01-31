@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
+// const auth = require('../middleware/auth.middleware');
+// const authorize = require('../middleware/role.middleware');
+
 const auth = require('../middleware/auth.middleware');
 const authorize = require('../middleware/role.middleware');
 
+// router.use(auth);
 router.use(auth);
 router.use(authorize('admin'));
 

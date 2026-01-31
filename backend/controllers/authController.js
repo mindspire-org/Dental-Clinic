@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const { generateToken, generateRefreshToken } = require('../config/jwt');
+const { getOrCreateLicense } = require('../middleware/permissions.middleware');
 
 exports.register = async (req, res, next) => {
     try {
@@ -28,6 +29,12 @@ exports.register = async (req, res, next) => {
         const token = generateToken(user._id, user.role);
         const refreshToken = generateRefreshToken(user._id);
 
+        const lic = await getOrCreateLicense();
+        const licensePayload = {
+            isActive: lic.isActive,
+            enabledModules: lic.enabledModules || [],
+        };
+
         res.status(201).json({
             status: 'success',
             data: {
@@ -38,9 +45,11 @@ exports.register = async (req, res, next) => {
                     firstName: user.firstName,
                     lastName: user.lastName,
                     role: user.role,
+                    permissions: user.permissions || [],
                 },
                 token,
                 refreshToken,
+                license: licensePayload,
             },
         });
     } catch (error) {
@@ -53,7 +62,12 @@ exports.login = async (req, res, next) => {
         const { email, password } = req.body;
 
         // Check if user exists includes password
-        const user = await User.findOne({ email }).select('+password');
+        const user = await User.findOne({
+            $or: [
+                { email },
+                { username: email },
+            ],
+        }).select('+password');
         if (!user) {
             return res.status(401).json({
                 status: 'error',
@@ -74,6 +88,12 @@ exports.login = async (req, res, next) => {
         const token = generateToken(user._id, user.role);
         const refreshToken = generateRefreshToken(user._id);
 
+        const lic = await getOrCreateLicense();
+        const licensePayload = {
+            isActive: lic.isActive,
+            enabledModules: lic.enabledModules || [],
+        };
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -84,9 +104,71 @@ exports.login = async (req, res, next) => {
                     firstName: user.firstName,
                     lastName: user.lastName,
                     role: user.role,
+                    permissions: user.permissions || [],
                 },
                 token,
                 refreshToken,
+                license: licensePayload,
+            },
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.ownerLogin = async (req, res, next) => {
+    try {
+        const { email, password, licenseKey } = req.body;
+
+        const user = await User.findOne({
+            $or: [
+                { email },
+                { username: email },
+            ],
+        }).select('+password');
+
+        if (!user) {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+
+        if (user.role !== 'superadmin') {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+
+        const lic = await getOrCreateLicense();
+        const provided = String(licenseKey || '').trim();
+        const expected = String(lic.licenseKey || '').trim();
+        if (!provided || !expected || provided !== expected) {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized' });
+        }
+
+        const token = generateToken(user._id, user.role);
+        const refreshToken = generateRefreshToken(user._id);
+
+        res.status(200).json({
+            status: 'success',
+            data: {
+                user: {
+                    id: user._id,
+                    username: user.username,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                    permissions: user.permissions || [],
+                },
+                token,
+                refreshToken,
+                license: {
+                    isActive: lic.isActive,
+                    enabledModules: lic.enabledModules || [],
+                    licenseKey: lic.licenseKey,
+                },
             },
         });
     } catch (error) {
@@ -105,9 +187,20 @@ exports.logout = (req, res) => {
 exports.getMe = async (req, res, next) => {
     try {
         const user = await User.findById(req.user.id);
+        const lic = await getOrCreateLicense();
+        const licensePayload = {
+            isActive: lic.isActive,
+            enabledModules: lic.enabledModules || [],
+        };
+        if (req.user?.role === 'superadmin') {
+            licensePayload.licenseKey = lic.licenseKey;
+        }
         res.status(200).json({
             status: 'success',
-            data: { user },
+            data: {
+                user,
+                license: licensePayload,
+            },
         });
     } catch (error) {
         next(error);

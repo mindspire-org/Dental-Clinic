@@ -9,8 +9,12 @@ const insuranceSchema = new mongoose.Schema({
     patient: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Patient',
-        required: true,
+        required: false,
         index: true
+    },
+    patientName: {
+        type: String,
+        trim: true,
     },
     provider: {
         type: String,
@@ -62,7 +66,7 @@ const insuranceSchema = new mongoose.Schema({
 });
 
 // Auto-generate claimId before saving
-insuranceSchema.pre('save', async function (next) {
+insuranceSchema.pre('validate', async function (next) {
     if (!this.claimId) {
         const count = await mongoose.model('Insurance').countDocuments();
         this.claimId = `CLM-${String(count + 1).padStart(6, '0')}`;

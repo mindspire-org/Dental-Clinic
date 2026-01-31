@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Search, Plus, MessageSquare, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const notifications = [
   { id: 1, title: 'New appointment request', desc: 'John Doe requested an appointment for tomorrow', time: '2 min ago', unread: true },
@@ -20,6 +23,22 @@ const notifications = [
 ];
 
 export function Header() {
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const go = (path: string) => {
+    navigate(path);
+  };
+
+  const handleGlobalSearch = () => {
+    const q = searchQuery.trim();
+    if (!q) {
+      go('/patients');
+      return;
+    }
+    go(`/patients?q=${encodeURIComponent(q)}`);
+  };
+
   return (
     <header className="h-16 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
       <div className="h-full px-4 flex items-center justify-between gap-4">
@@ -32,6 +51,11 @@ export function Header() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search patients, appointments..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleGlobalSearch();
+              }}
               className="w-80 pl-10 h-10 bg-muted/50 border-transparent focus:border-primary focus:bg-card transition-all"
             />
             <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground bg-background px-1.5 py-0.5 rounded border">
@@ -52,15 +76,29 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-popover">
-              <DropdownMenuItem>New Patient</DropdownMenuItem>
-              <DropdownMenuItem>New Appointment</DropdownMenuItem>
-              <DropdownMenuItem>New Treatment</DropdownMenuItem>
-              <DropdownMenuItem>New Invoice</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => go('/patients/new')}>New Patient</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => go('/appointments?new=1')}>New Appointment</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => go('/treatments?new=1')}>New Treatment</DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  go('/billing/checkup');
+                  toast.info('Create invoices from completed appointments on the Billing page.');
+                }}
+              >
+                New Invoice
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           {/* Messages */}
-          <Button variant="ghost" size="icon" className="h-9 w-9 relative text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 relative text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              toast.info('Messages module is not available yet.');
+            }}
+          >
             <MessageSquare className="w-5 h-5" />
             <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-primary text-primary-foreground text-[10px] font-bold rounded-full flex items-center justify-center">
               3
@@ -84,7 +122,15 @@ export function Header() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {notifications.map((notif) => (
-                <DropdownMenuItem key={notif.id} className="flex flex-col items-start gap-1 p-3 cursor-pointer">
+                <DropdownMenuItem
+                  key={notif.id}
+                  className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                  onSelect={() => {
+                    if (notif.id === 1) go('/appointments/waiting');
+                    else if (notif.id === 2) go('/lab-work');
+                    else if (notif.id === 3) go('/billing/payments');
+                  }}
+                >
                   <div className="flex items-center gap-2 w-full">
                     {notif.unread && <span className="w-2 h-2 rounded-full bg-primary" />}
                     <span className={cn('font-medium text-sm', notif.unread && 'text-foreground')}>
@@ -96,7 +142,7 @@ export function Header() {
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="justify-center text-primary font-medium">
+              <DropdownMenuItem className="justify-center text-primary font-medium" onSelect={() => go('/appointments')}>
                 View all notifications
               </DropdownMenuItem>
             </DropdownMenuContent>

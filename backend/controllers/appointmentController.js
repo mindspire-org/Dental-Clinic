@@ -2,6 +2,35 @@ const Appointment = require('../models/Appointment');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 
+const normalizeStatus = (status) => {
+    if (!status) return status;
+    if (status === 'in-progress') return 'in_progress';
+    if (status === 'no-show') return 'no_show';
+    return status;
+};
+
+const normalizeType = (type) => {
+    if (!type) return type;
+    if (type === 'root-canal') return 'root_canal';
+    return type;
+};
+
+const addMinutesToTime = (timeStr, minutesToAdd) => {
+    if (!timeStr) return timeStr;
+    const [h, m] = String(timeStr).split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return timeStr;
+    const total = h * 60 + m + minutesToAdd;
+    const hh = String(Math.floor(total / 60) % 24).padStart(2, '0');
+    const mm = String(total % 60).padStart(2, '0');
+    return `${hh}:${mm}`;
+};
+
+const getSafeEndTime = (apt) => {
+    if (apt?.endTime) return apt.endTime;
+    const duration = Number(apt?.duration || 30);
+    return addMinutesToTime(apt?.startTime, duration);
+};
+
 // Get all appointments with filters
 exports.getAllAppointments = async (req, res, next) => {
     try {
@@ -10,6 +39,10 @@ exports.getAllAppointments = async (req, res, next) => {
 
         if (status) query.status = status;
         if (dentist) query.dentist = dentist;
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
         if (date) {
             const startDate = new Date(date);
             const endDate = new Date(date);
@@ -24,12 +57,22 @@ exports.getAllAppointments = async (req, res, next) => {
             .limit(limit * 1)
             .skip((page - 1) * limit);
 
+        const normalizedAppointments = appointments.map((apt) => {
+            const obj = apt.toObject({ virtuals: true });
+            return {
+                ...obj,
+                status: normalizeStatus(obj.status),
+                type: normalizeType(obj.type),
+                endTime: getSafeEndTime(obj),
+            };
+        });
+
         const total = await Appointment.countDocuments(query);
 
         res.status(200).json({
             status: 'success',
             data: {
-                appointments,
+                appointments: normalizedAppointments,
                 meta: {
                     total,
                     page: parseInt(page),
@@ -55,6 +98,9 @@ exports.getCalendarView = async (req, res, next) => {
         };
 
         if (dentist) query.dentist = dentist;
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
 
         const appointments = await Appointment.find(query)
             .populate('patient', 'firstName lastName phone')
@@ -66,10 +112,10 @@ exports.getCalendarView = async (req, res, next) => {
             id: apt._id,
             title: `${apt.patient.firstName} ${apt.patient.lastName}`,
             start: new Date(`${apt.appointmentDate.toISOString().split('T')[0]}T${apt.startTime}`),
-            end: new Date(`${apt.appointmentDate.toISOString().split('T')[0]}T${apt.endTime}`),
+            end: new Date(`${apt.appointmentDate.toISOString().split('T')[0]}T${getSafeEndTime(apt)}`),
             dentist: `Dr. ${apt.dentist.firstName} ${apt.dentist.lastName}`,
-            type: apt.type,
-            status: apt.status,
+            type: normalizeType(apt.type),
+            status: normalizeStatus(apt.status),
             phone: apt.patient.phone
         }));
 
@@ -137,7 +183,7 @@ exports.getAvailableSlots = async (req, res, next) => {
 
             // Check if slot is available
             const isBooked = existingAppointments.some(apt =>
-                apt.startTime <= timeStr && apt.endTime > timeStr
+                apt.startTime <= timeStr && getSafeEndTime(apt) > timeStr
             );
 
             slots.push({
@@ -165,7 +211,22 @@ exports.getAvailableSlots = async (req, res, next) => {
 // Create appointment
 exports.createAppointment = async (req, res, next) => {
     try {
-        const appointment = await Appointment.create(req.body);
+        const payload = {
+            ...req.body,
+            status: normalizeStatus(req.body.status),
+            type: normalizeType(req.body.type),
+        };
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            payload.dentist = req.user._id;
+        }
+
+        if (payload.startTime && !payload.endTime) {
+            const duration = Number(payload.duration || 30);
+            payload.endTime = addMinutesToTime(payload.startTime, duration);
+        }
+
+        const appointment = await Appointment.create(payload);
         await appointment.populate('patient dentist');
 
         res.status(201).json({
@@ -180,9 +241,29 @@ exports.createAppointment = async (req, res, next) => {
 // Update appointment
 exports.updateAppointment = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findByIdAndUpdate(
-            req.params.id,
-            req.body,
+        const payload = {
+            ...req.body,
+            status: normalizeStatus(req.body.status),
+            type: normalizeType(req.body.type),
+        };
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            payload.dentist = req.user._id;
+        }
+
+        if (payload.startTime && !payload.endTime) {
+            const duration = Number(payload.duration || 30);
+            payload.endTime = addMinutesToTime(payload.startTime, duration);
+        }
+
+        const baseQuery = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            baseQuery.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOneAndUpdate(
+            baseQuery,
+            payload,
             { new: true, runValidators: true }
         ).populate('patient dentist');
 
@@ -205,8 +286,13 @@ exports.updateAppointment = async (req, res, next) => {
 // Confirm appointment
 exports.confirmAppointment = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findByIdAndUpdate(
-            req.params.id,
+        const baseQuery = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            baseQuery.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOneAndUpdate(
+            baseQuery,
             { status: 'confirmed' },
             { new: true }
         ).populate('patient dentist');
@@ -230,8 +316,13 @@ exports.confirmAppointment = async (req, res, next) => {
 // Complete appointment
 exports.completeAppointment = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findByIdAndUpdate(
-            req.params.id,
+        const baseQuery = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            baseQuery.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOneAndUpdate(
+            baseQuery,
             { status: 'completed' },
             { new: true }
         ).populate('patient dentist');
@@ -255,8 +346,13 @@ exports.completeAppointment = async (req, res, next) => {
 // Mark as no-show
 exports.markNoShow = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findByIdAndUpdate(
-            req.params.id,
+        const baseQuery = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            baseQuery.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOneAndUpdate(
+            baseQuery,
             { status: 'no_show' },
             { new: true }
         ).populate('patient dentist');
@@ -282,11 +378,15 @@ exports.cancelAppointment = async (req, res, next) => {
     try {
         const { reason } = req.body;
 
-        const appointment = await Appointment.findByIdAndUpdate(
-            req.params.id,
+        const baseQuery = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            baseQuery.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOneAndUpdate(
+            baseQuery,
             {
                 status: 'cancelled',
-                cancelledBy: req.user._id,
                 cancellationReason: reason
             },
             { new: true }
@@ -311,7 +411,12 @@ exports.cancelAppointment = async (req, res, next) => {
 // Get appointment by ID
 exports.getAppointmentById = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findById(req.params.id)
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const appointment = await Appointment.findOne(query)
             .populate('patient')
             .populate('dentist');
 
@@ -334,7 +439,11 @@ exports.getAppointmentById = async (req, res, next) => {
 // Delete appointment
 exports.deleteAppointment = async (req, res, next) => {
     try {
-        const appointment = await Appointment.findByIdAndDelete(req.params.id);
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+        const appointment = await Appointment.findOneAndDelete(query);
 
         if (!appointment) {
             return res.status(404).json({

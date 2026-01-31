@@ -8,10 +8,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Lock, User, Eye, EyeOff, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { authApi } from '@/lib/api';
 
 const Login = () => {
     const navigate = useNavigate();
-    const { setRole } = useRole();
+    const { setAuth } = useRole();
     const [isLoading, setIsLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState('');
@@ -19,14 +20,45 @@ const Login = () => {
 
     const handleLogin = async (role: UserRole) => {
         setIsLoading(true);
+        try {
+            const res = await authApi.login(email, password);
+            const token = res?.data?.token;
+            const user = res?.data?.user;
+            const lic = res?.data?.license;
 
-        // Simulate API call
-        setTimeout(() => {
-            setIsLoading(false);
-            setRole(role);
-            toast.success(`Welcome back! Logged in as ${role.charAt(0).toUpperCase() + role.slice(1)}`);
+            if (token) {
+                localStorage.setItem('token', token);
+            }
+
+            const nextRole = (user?.role as UserRole) || role;
+            const name = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
+
+            if (nextRole !== 'superadmin' && !lic?.isActive) {
+                localStorage.removeItem('token');
+                toast.error('License is not active. Please contact the software provider.');
+                return;
+            }
+
+            if (nextRole === 'admin' && (!Array.isArray(user?.permissions) || user.permissions.length === 0)) {
+                localStorage.removeItem('token');
+                toast.error('No permissions assigned. Please ask Super Admin to enable modules.');
+                return;
+            }
+
+            setAuth({
+                role: nextRole,
+                userName: name || undefined,
+                permissions: user?.permissions || [],
+                license: lic,
+            });
+
+            toast.success('Welcome back!');
             navigate('/');
-        }, 1500);
+        } catch (e: any) {
+            toast.error(e?.message || 'Login failed');
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -102,7 +134,7 @@ const Login = () => {
                                     <TabsContent key={role} value={role} className="mt-0">
                                         <div className="space-y-4">
                                             <div className="space-y-2">
-                                                <Label htmlFor={`${role}-email`}>Email</Label>
+                                                <Label htmlFor="email" className="text-slate-600">Email or Username</Label>
                                                 <div className="relative group">
                                                     <User className="absolute left-3 top-3 h-4 w-4 text-slate-400 group-focus-within:text-primary transition-colors" />
                                                     <Input

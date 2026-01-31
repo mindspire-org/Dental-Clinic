@@ -60,7 +60,7 @@ export function FormModal({
                     {description && <DialogDescription>{description}</DialogDescription>}
                 </DialogHeader>
 
-                <div className="py-4 max-h-[60vh] overflow-y-auto">
+                <div className="py-4 max-h-[60vh] overflow-y-auto scrollbar-none">
                     {children}
                 </div>
 

@@ -45,6 +45,20 @@ const labWorkSchema = new mongoose.Schema({
     },
     notes: String,
     trackingNumber: String,
+    invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Billing',
+    },
+    paidAmount: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['unpaid', 'partial', 'paid'],
+        default: 'unpaid',
+    },
 }, {
     timestamps: true,
 });

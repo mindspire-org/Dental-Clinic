@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +15,11 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Plus, Edit, Trash2, Mail, Phone, User } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { staffApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface StaffMember {
     _id: string;
+    username?: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -27,12 +31,17 @@ interface StaffMember {
 }
 
 export default function StaffList() {
+    const navigate = useNavigate();
     const [staff, setStaff] = useState<StaffMember[]>([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [authMissing, setAuthMissing] = useState(false);
     const [showModal, setShowModal] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
     const [formData, setFormData] = useState({
+        username: '',
+        password: '',
         firstName: '',
         lastName: '',
         email: '',
@@ -42,6 +51,13 @@ export default function StaffList() {
     });
 
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setAuthMissing(true);
+            setLoading(false);
+            return;
+        }
+        setAuthMissing(false);
         fetchStaff();
     }, []);
 
@@ -60,6 +76,8 @@ export default function StaffList() {
     const handleCreate = () => {
         setSelectedStaff(null);
         setFormData({
+            username: '',
+            password: '',
             firstName: '',
             lastName: '',
             email: '',
@@ -73,6 +91,8 @@ export default function StaffList() {
     const handleEdit = (member: StaffMember) => {
         setSelectedStaff(member);
         setFormData({
+            username: member.username || '',
+            password: '',
             firstName: member.firstName,
             lastName: member.lastName,
             email: member.email,
@@ -89,16 +109,57 @@ export default function StaffList() {
     };
 
     const handleSubmit = async () => {
+        if (saving) return;
         try {
+            setSaving(true);
+            if (!formData.username?.trim()) {
+                toast.error('Username is required');
+                return;
+            }
+            if (!formData.firstName?.trim() || !formData.lastName?.trim()) {
+                toast.error('First name and last name are required');
+                return;
+            }
+            if (!formData.email?.trim()) {
+                toast.error('Email is required');
+                return;
+            }
+            if (!formData.role) {
+                toast.error('Role is required');
+                return;
+            }
+            if (!selectedStaff) {
+                if (!formData.password) {
+                    toast.error('Password is required for new staff');
+                    return;
+                }
+                if (String(formData.password).length < 6) {
+                    toast.error('Password must be at least 6 characters');
+                    return;
+                }
+            }
+
+            const payload: any = { ...formData };
+            if (!payload.password) delete payload.password;
             if (selectedStaff) {
-                await staffApi.update(selectedStaff._id, formData);
+                await staffApi.update(selectedStaff._id, payload);
+                toast.success('Staff member updated');
             } else {
-                await staffApi.create(formData);
+                const created = await staffApi.create(payload);
+                const tempPassword = created?.data?.tempPassword;
+                if (tempPassword) {
+                    toast.success(`Staff created. Temporary password: ${tempPassword}`);
+                } else {
+                    toast.success('Staff member created');
+                }
             }
             setShowModal(false);
             fetchStaff();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error saving staff:', error);
+            toast.error(error?.message || 'Failed to save staff member');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -205,13 +266,30 @@ export default function StaffList() {
     ];
 
     if (loading) {
-        return <LoadingState type="table" rows={10} />;
+        return (
+            <DashboardLayout>
+                <LoadingState type="table" rows={10} />
+            </DashboardLayout>
+        );
+    }
+
+    if (authMissing) {
+        return (
+            <DashboardLayout>
+                <EmptyState
+                    title="Login required"
+                    description="Please login to manage staff."
+                    action={{ label: 'Go to Login', onClick: () => navigate('/login') }}
+                />
+            </DashboardLayout>
+        );
     }
 
     const dentists = staff.filter(s => s.role === 'dentist').length;
     const activeStaff = staff.filter(s => s.isActive).length;
 
     return (
+        <DashboardLayout>
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
@@ -302,8 +380,31 @@ export default function StaffList() {
                 description={selectedStaff ? 'Update staff information' : 'Add a new staff member'}
                 onSubmit={handleSubmit}
                 size="lg"
+                isLoading={saving}
             >
                 <div className="grid gap-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="username">Username *</Label>
+                            <Input
+                                id="username"
+                                value={formData.username}
+                                onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                                placeholder="e.g., afzal"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="password">Password {selectedStaff ? '(optional)' : '*'}</Label>
+                            <Input
+                                id="password"
+                                type="password"
+                                value={formData.password}
+                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                placeholder={selectedStaff ? 'Leave blank to keep unchanged' : 'Minimum 6 characters'}
+                            />
+                        </div>
+                    </div>
+
                     <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="firstName">First Name *</Label>
@@ -361,8 +462,6 @@ export default function StaffList() {
                                     <SelectItem value="admin">Admin</SelectItem>
                                     <SelectItem value="dentist">Dentist</SelectItem>
                                     <SelectItem value="receptionist">Receptionist</SelectItem>
-                                    <SelectItem value="hygienist">Hygienist</SelectItem>
-                                    <SelectItem value="assistant">Assistant</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
@@ -388,5 +487,6 @@ export default function StaffList() {
                 description={`Are you sure you want to delete ${selectedStaff?.firstName} ${selectedStaff?.lastName}? This action cannot be undone.`}
             />
         </div>
+        </DashboardLayout>
     );
 }

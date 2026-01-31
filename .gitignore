@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+.env
+backend/.env
+uploads/
+vite.config.ts.timestamp-*
+*.timestamp-*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

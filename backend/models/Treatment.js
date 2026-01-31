@@ -6,6 +6,10 @@ const treatmentSchema = new mongoose.Schema({
         ref: 'Patient',
         required: [true, 'Patient is required'],
     },
+    procedure: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'TreatmentProcedure',
+    },
     dentist: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
@@ -55,7 +59,32 @@ const treatmentSchema = new mongoose.Schema({
         type: Number,
         min: 0,
     },
+    paidAmount: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+    progressPercent: {
+        type: Number,
+        min: 0,
+        max: 100,
+        default: 0,
+    },
+    plannedSessions: {
+        type: Number,
+        min: 1,
+        default: 1,
+    },
     notes: String,
+    invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Billing',
+    },
+    advancePaid: {
+        type: Number,
+        default: 0,
+        min: 0,
+    },
     sessions: [{
         date: Date,
         duration: Number,
@@ -67,6 +96,13 @@ const treatmentSchema = new mongoose.Schema({
     }],
 }, {
     timestamps: true,
+});
+
+// Virtual for balance due
+treatmentSchema.virtual('balanceDue').get(function () {
+    const cost = this.actualCost || this.estimatedCost || 0;
+    const paid = (this.paidAmount || 0) + (this.advancePaid || 0);
+    return Math.max(0, cost - paid);
 });
 
 // Index for queries

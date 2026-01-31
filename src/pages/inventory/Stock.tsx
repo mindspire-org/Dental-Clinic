@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { DataTable } from '@/components/shared/DataTable';
 import { FormModal } from '@/components/shared/FormModal';
 import { DeleteDialog } from '@/components/shared/DeleteDialog';
@@ -14,31 +15,68 @@ import { Plus, Edit, Trash2, Package, AlertTriangle } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { inventoryApi } from '@/lib/api';
 
+interface SupplierRecord {
+    _id: string;
+    name: string;
+    contactPerson?: string;
+    email?: string;
+    phone?: string;
+    address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        zipCode?: string;
+        country?: string;
+    };
+    rating?: number;
+    paymentTerms?: string;
+    notes?: string;
+    isActive?: boolean;
+}
+
 interface InventoryItem {
     _id: string;
     name: string;
+    sku?: string;
     category: string;
     quantity: number;
     unit: string;
     reorderLevel: number;
     price: number;
     supplier?: string;
+    supplierContact?: string;
+    supplierEmail?: string;
+    supplierPhone?: string;
+    supplierDetails?: SupplierRecord;
+    location?: string;
+    expiryDate?: string;
+    lastRestocked?: string;
+    notes?: string;
 }
 
 export default function InventoryStock() {
     const [items, setItems] = useState<InventoryItem[]>([]);
     const [loading, setLoading] = useState(true);
+    const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
     const [showModal, setShowModal] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+    const [selectedSupplierId, setSelectedSupplierId] = useState('');
     const [formData, setFormData] = useState({
         name: '',
+        sku: '',
         category: '',
         quantity: '',
         unit: '',
         reorderLevel: '',
         price: '',
         supplier: '',
+        supplierContact: '',
+        supplierEmail: '',
+        supplierPhone: '',
+        location: '',
+        expiryDate: '',
+        notes: '',
     });
 
     useEffect(() => {
@@ -48,8 +86,53 @@ export default function InventoryStock() {
     const fetchItems = async () => {
         try {
             setLoading(true);
-            const response = await inventoryApi.getAll();
-            setItems(response.data.inventory || response.data.items);
+            const [itemsRes, suppliersRes] = await Promise.all([
+                inventoryApi.getAll(),
+                inventoryApi.suppliers.getAll(),
+            ]);
+
+            const suppliers: SupplierRecord[] = suppliersRes.data.suppliers || [];
+            setSuppliers(suppliers);
+            const suppliersByName = new Map(
+                suppliers
+                    .filter((s) => s?.name)
+                    .map((s) => [String(s.name).trim().toLowerCase(), s]),
+            );
+
+            const suppliersByEmail = new Map(
+                suppliers
+                    .filter((s) => s?.email)
+                    .map((s) => [String(s.email).trim().toLowerCase(), s]),
+            );
+
+            const normalizePhone = (value: string) => String(value || '').replace(/\D/g, '');
+            const suppliersByPhone = new Map(
+                suppliers
+                    .filter((s) => s?.phone)
+                    .map((s) => [normalizePhone(String(s.phone)), s]),
+            );
+
+            const enrichedItems: InventoryItem[] = (itemsRes.data.items || []).map((it: InventoryItem) => {
+                const keyName = String(it.supplier || '').trim().toLowerCase();
+                const keyEmail = String(it.supplierEmail || '').trim().toLowerCase();
+                const keyPhone = normalizePhone(String(it.supplierPhone || ''));
+
+                const supplierDetails =
+                    (keyName ? suppliersByName.get(keyName) : undefined) ||
+                    (keyEmail ? suppliersByEmail.get(keyEmail) : undefined) ||
+                    (keyPhone ? suppliersByPhone.get(keyPhone) : undefined);
+
+                return {
+                    ...it,
+                    supplierDetails,
+                    supplier: supplierDetails?.name || it.supplier,
+                    supplierPhone: supplierDetails?.phone || it.supplierPhone,
+                    supplierEmail: supplierDetails?.email || it.supplierEmail,
+                    supplierContact: supplierDetails?.contactPerson || it.supplierContact,
+                };
+            });
+
+            setItems(enrichedItems);
         } catch (error) {
             console.error('Error fetching inventory:', error);
         } finally {
@@ -59,28 +142,61 @@ export default function InventoryStock() {
 
     const handleCreate = () => {
         setSelectedItem(null);
+        setSelectedSupplierId('');
         setFormData({
             name: '',
+            sku: '',
             category: '',
             quantity: '',
             unit: '',
             reorderLevel: '',
             price: '',
             supplier: '',
+            supplierContact: '',
+            supplierEmail: '',
+            supplierPhone: '',
+            location: '',
+            expiryDate: '',
+            notes: '',
         });
         setShowModal(true);
     };
 
+    const handleSupplierSelect = (supplierId: string) => {
+        setSelectedSupplierId(supplierId);
+        if (!supplierId) return;
+        const s = suppliers.find((x) => x._id === supplierId);
+        if (!s) return;
+        setFormData((prev) => ({
+            ...prev,
+            supplier: s.name || prev.supplier,
+            supplierContact: s.contactPerson || prev.supplierContact,
+            supplierEmail: s.email || prev.supplierEmail,
+            supplierPhone: s.phone || prev.supplierPhone,
+        }));
+    };
+
     const handleEdit = (item: InventoryItem) => {
         setSelectedItem(item);
+
+        const match = suppliers.find((s) => String(s.name || '').trim().toLowerCase() === String(item.supplier || '').trim().toLowerCase());
+        setSelectedSupplierId(match?._id || '');
+
         setFormData({
             name: item.name,
+            sku: item.sku || '',
             category: item.category,
             quantity: item.quantity.toString(),
             unit: item.unit,
             reorderLevel: item.reorderLevel.toString(),
             price: item.price.toString(),
             supplier: item.supplier || '',
+            supplierContact: item.supplierContact || '',
+            supplierEmail: item.supplierEmail || '',
+            supplierPhone: item.supplierPhone || '',
+            location: item.location || '',
+            expiryDate: item.expiryDate ? String(item.expiryDate).slice(0, 10) : '',
+            notes: item.notes || '',
         });
         setShowModal(true);
     };
@@ -129,11 +245,15 @@ export default function InventoryStock() {
             cell: ({ row }) => (
                 <div>
                     <div className="font-medium">{row.original.name}</div>
-                    <div className="text-sm text-muted-foreground capitalize">
-                        {row.original.category}
-                    </div>
+                    <div className="text-sm text-muted-foreground capitalize">{row.original.category}</div>
+                    <div className="text-xs text-muted-foreground">{row.original.sku || '-'}</div>
                 </div>
             ),
+        },
+        {
+            accessorKey: 'location',
+            header: 'Location',
+            cell: ({ row }) => <span className="text-sm">{row.original.location || '-'}</span>,
         },
         {
             accessorKey: 'quantity',
@@ -170,7 +290,19 @@ export default function InventoryStock() {
             accessorKey: 'supplier',
             header: 'Supplier',
             cell: ({ row }) => (
-                <span className="text-sm">{row.original.supplier || '-'}</span>
+                <div className="text-sm">
+                    <div className="font-medium">{row.original.supplier || '-'}</div>
+                    <div className="text-xs text-muted-foreground">{row.original.supplierPhone || row.original.supplierEmail || row.original.supplierContact || ''}</div>
+                </div>
+            ),
+        },
+        {
+            accessorKey: 'expiryDate',
+            header: 'Expiry',
+            cell: ({ row }) => (
+                <span className="text-sm">
+                    {row.original.expiryDate ? String(row.original.expiryDate).slice(0, 10) : '-'}
+                </span>
             ),
         },
         {
@@ -321,6 +453,27 @@ export default function InventoryStock() {
 
                     <div className="grid gap-4 md:grid-cols-2">
                         <div className="space-y-2">
+                            <Label htmlFor="sku">SKU</Label>
+                            <Input
+                                id="sku"
+                                value={formData.sku}
+                                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                placeholder="e.g., INV-001"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="location">Location</Label>
+                            <Input
+                                id="location"
+                                value={formData.location}
+                                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                                placeholder="e.g., Storage Room A"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
                             <Label htmlFor="category">Category *</Label>
                             <Select
                                 value={formData.category}
@@ -398,12 +551,78 @@ export default function InventoryStock() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="supplier">Supplier</Label>
+                            <Label htmlFor="supplierId">Supplier</Label>
+                            <select
+                                id="supplierId"
+                                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                                value={selectedSupplierId}
+                                onChange={(e) => handleSupplierSelect(e.target.value)}
+                            >
+                                <option value="">Custom / None</option>
+                                {suppliers.map((s) => (
+                                    <option key={s._id} value={s._id}>
+                                        {s.name}
+                                    </option>
+                                ))}
+                            </select>
+                            {!selectedSupplierId ? (
+                                <Input
+                                    id="supplier"
+                                    value={formData.supplier}
+                                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                                    placeholder="Supplier name"
+                                />
+                            ) : null}
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-3">
+                        <div className="space-y-2">
+                            <Label htmlFor="supplierPhone">Supplier Phone</Label>
                             <Input
-                                id="supplier"
-                                value={formData.supplier}
-                                onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                                placeholder="Supplier name"
+                                id="supplierPhone"
+                                value={formData.supplierPhone}
+                                onChange={(e) => setFormData({ ...formData, supplierPhone: e.target.value })}
+                                placeholder="e.g., +1 555 123 4567"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="supplierEmail">Supplier Email</Label>
+                            <Input
+                                id="supplierEmail"
+                                value={formData.supplierEmail}
+                                onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
+                                placeholder="e.g., orders@supplier.com"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="supplierContact">Contact Person</Label>
+                            <Input
+                                id="supplierContact"
+                                value={formData.supplierContact}
+                                onChange={(e) => setFormData({ ...formData, supplierContact: e.target.value })}
+                                placeholder="e.g., John Doe"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                            <Label htmlFor="expiryDate">Expiry Date</Label>
+                            <Input
+                                id="expiryDate"
+                                type="date"
+                                value={formData.expiryDate}
+                                onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="notes">Notes</Label>
+                            <Textarea
+                                id="notes"
+                                value={formData.notes}
+                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                placeholder="Optional notes about this item"
                             />
                         </div>
                     </div>

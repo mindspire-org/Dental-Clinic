@@ -9,7 +9,7 @@ import {
     ColumnFiltersState,
     useReactTable,
 } from '@tanstack/react-table';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -36,6 +36,7 @@ interface DataTableProps<TData, TValue> {
     searchPlaceholder?: string;
     isLoading?: boolean;
     onRowClick?: (row: TData) => void;
+    globalFilterValue?: string;
 }
 
 export function DataTable<TData, TValue>({
@@ -45,10 +46,16 @@ export function DataTable<TData, TValue>({
     searchPlaceholder = 'Search...',
     isLoading = false,
     onRowClick,
+    globalFilterValue,
 }: DataTableProps<TData, TValue>) {
     const [sorting, setSorting] = useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [globalFilter, setGlobalFilter] = useState('');
+
+    useEffect(() => {
+        if (globalFilterValue === undefined) return;
+        setGlobalFilter(globalFilterValue);
+    }, [globalFilterValue]);
 
     const table = useReactTable({
         data,

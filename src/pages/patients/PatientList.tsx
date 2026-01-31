@@ -10,10 +10,17 @@ import { FormModal } from '@/components/shared/FormModal';
 import { DeleteDialog } from '@/components/shared/DeleteDialog';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { Plus, Edit, Trash2, Eye, Phone, Mail, Calendar } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Plus, Edit, Trash2, Eye, Phone, Mail, Calendar, Users, UserCheck, UserX, UserPlus } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { patientsApi } from '@/lib/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 interface Patient {
     _id: string;
@@ -29,11 +36,17 @@ interface Patient {
 
 export default function PatientList() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+    const [showViewDialog, setShowViewDialog] = useState(false);
+    const [viewLoading, setViewLoading] = useState(false);
+    const [viewError, setViewError] = useState<string | null>(null);
+    const [viewPatient, setViewPatient] = useState<Patient | null>(null);
+    const [externalQuery, setExternalQuery] = useState('');
     const [formData, setFormData] = useState({
         firstName: '',
         lastName: '',
@@ -46,6 +59,11 @@ export default function PatientList() {
     useEffect(() => {
         fetchPatients();
     }, []);
+
+    useEffect(() => {
+        const q = (searchParams.get('q') || '').trim();
+        setExternalQuery(q);
+    }, [searchParams]);
 
     const fetchPatients = async () => {
         try {
@@ -88,6 +106,21 @@ export default function PatientList() {
     const handleDelete = (patient: Patient) => {
         setSelectedPatient(patient);
         setShowDeleteDialog(true);
+    };
+
+    const handleView = async (patient: Patient) => {
+        setShowViewDialog(true);
+        setViewLoading(true);
+        setViewError(null);
+        setViewPatient(null);
+        try {
+            const res = await patientsApi.getById(patient._id);
+            setViewPatient(res.data.patient);
+        } catch (error) {
+            setViewError(error instanceof Error ? error.message : 'Failed to load patient');
+        } finally {
+            setViewLoading(false);
+        }
     };
 
     const handleSubmit = async () => {
@@ -195,21 +228,30 @@ export default function PatientList() {
                     <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => navigate(`/patients/${row.original._id}`)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleView(row.original);
+                        }}
                     >
                         <Eye className="w-4 h-4" />
                     </Button>
                     <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleEdit(row.original)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(row.original);
+                        }}
                     >
                         <Edit className="w-4 h-4" />
                     </Button>
                     <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => handleDelete(row.original)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(row.original);
+                        }}
                     >
                         <Trash2 className="w-4 h-4 text-destructive" />
                     </Button>
@@ -222,6 +264,46 @@ export default function PatientList() {
         return <LoadingState type="table" rows={10} />;
     }
 
+    const now = new Date();
+    const totalPatients = patients.length;
+    const activePatients = patients.filter((p) => p.isActive).length;
+    const inactivePatients = patients.filter((p) => !p.isActive).length;
+    const newThisMonth = patients.filter((p) => {
+        const created = new Date(p.createdAt);
+        return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+    }).length;
+
+    const summaryCards = [
+        {
+            title: 'Total Patients',
+            value: totalPatients,
+            icon: Users,
+            className: 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/20',
+            iconClassName: 'text-primary',
+        },
+        {
+            title: 'Active',
+            value: activePatients,
+            icon: UserCheck,
+            className: 'bg-gradient-to-br from-success/15 to-success/5 border-success/20',
+            iconClassName: 'text-success',
+        },
+        {
+            title: 'New This Month',
+            value: newThisMonth,
+            icon: UserPlus,
+            className: 'bg-gradient-to-br from-info/15 to-info/5 border-info/20',
+            iconClassName: 'text-info',
+        },
+        {
+            title: 'Inactive',
+            value: inactivePatients,
+            icon: UserX,
+            className: 'bg-gradient-to-br from-destructive/15 to-destructive/5 border-destructive/20',
+            iconClassName: 'text-destructive',
+        },
+    ];
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -230,65 +312,29 @@ export default function PatientList() {
                     <h1 className="text-3xl font-bold">Patients</h1>
                     <p className="text-muted-foreground">Manage patient records and information</p>
                 </div>
-                <Button onClick={handleCreate} className="gradient-primary">
+                <Button onClick={() => navigate('/patients/new')} className="gradient-primary">
                     <Plus className="w-4 h-4 mr-2" />
                     New Patient
                 </Button>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Total Patients
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{patients.length}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Active Patients
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {patients.filter(p => p.isActive).length}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            New This Month
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {patients.filter(p => {
-                                const created = new Date(p.createdAt);
-                                const now = new Date();
-                                return created.getMonth() === now.getMonth() &&
-                                    created.getFullYear() === now.getFullYear();
-                            }).length}
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-muted-foreground">
-                            Inactive
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">
-                            {patients.filter(p => !p.isActive).length}
-                        </div>
-                    </CardContent>
-                </Card>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {summaryCards.map((c) => (
+                    <Card key={c.title} className={`shadow-card border ${c.className}`}>
+                        <CardContent className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="text-sm text-muted-foreground">{c.title}</div>
+                                    <div className="text-2xl font-bold text-foreground mt-1">{c.value}</div>
+                                </div>
+                                <div className="w-10 h-10 rounded-xl bg-background/60 border flex items-center justify-center">
+                                    <c.icon className={`w-5 h-5 ${c.iconClassName}`} />
+                                </div>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-2">{now.toLocaleDateString()}</div>
+                        </CardContent>
+                    </Card>
+                ))}
             </div>
 
             {/* Data Table */}
@@ -309,6 +355,7 @@ export default function PatientList() {
                             data={patients}
                             searchKey="firstName"
                             searchPlaceholder="Search patients..."
+                            globalFilterValue={externalQuery}
                         />
                     )}
                 </CardContent>
@@ -397,6 +444,71 @@ export default function PatientList() {
                 title="Delete Patient"
                 description={`Are you sure you want to delete ${selectedPatient?.firstName} ${selectedPatient?.lastName}? This action cannot be undone.`}
             />
+
+            <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            <div className="flex items-center justify-between gap-4">
+                                <span>Patient Details</span>
+                                {viewPatient?.isActive !== undefined && (
+                                    <Badge variant={viewPatient.isActive ? 'default' : 'secondary'}>
+                                        {viewPatient.isActive ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                )}
+                            </div>
+                        </DialogTitle>
+                        <DialogDescription>Patient profile and basic information</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="rounded-lg border bg-card/50">
+                        <div className="p-4 border-b gradient-primary text-primary-foreground rounded-t-lg">
+                            <div className="text-lg font-semibold">
+                                {viewPatient ? `${viewPatient.firstName} ${viewPatient.lastName}` : 'Loading...'}
+                            </div>
+                            <div className="text-sm opacity-90">ID: {viewPatient?._id || '-'}</div>
+                        </div>
+                        <div className="p-4">
+                            {viewLoading ? (
+                                <LoadingState type="cards" rows={3} />
+                            ) : viewError ? (
+                                <div className="text-sm text-destructive">{viewError}</div>
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Phone</div>
+                                        <div className="font-medium">{viewPatient?.phone || '-'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Email</div>
+                                        <div className="font-medium">{viewPatient?.email || '-'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Gender</div>
+                                        <div className="font-medium">{viewPatient?.gender || '-'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Date of Birth</div>
+                                        <div className="font-medium">
+                                            {viewPatient?.dateOfBirth
+                                                ? new Date(viewPatient.dateOfBirth).toLocaleDateString()
+                                                : '-'}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">Registered</div>
+                                        <div className="font-medium">
+                                            {viewPatient?.createdAt
+                                                ? new Date(viewPatient.createdAt).toLocaleDateString()
+                                                : '-'}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

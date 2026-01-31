@@ -15,6 +15,14 @@ const appointmentSchema = new mongoose.Schema({
         type: Date,
         required: [true, 'Appointment date is required'],
     },
+    startTime: {
+        type: String,
+        required: [true, 'Start time is required'],
+    },
+    endTime: {
+        type: String,
+        required: [true, 'End time is required'],
+    },
     duration: {
         type: Number,
         default: 30,
@@ -22,12 +30,12 @@ const appointmentSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['checkup', 'cleaning', 'filling', 'extraction', 'root-canal', 'crown', 'consultation', 'emergency', 'other'],
+        enum: ['checkup', 'cleaning', 'filling', 'extraction', 'root_canal', 'root-canal', 'crown', 'consultation', 'emergency', 'other'],
         required: [true, 'Appointment type is required'],
     },
     status: {
         type: String,
-        enum: ['scheduled', 'confirmed', 'in-progress', 'completed', 'cancelled', 'no-show'],
+        enum: ['scheduled', 'confirmed', 'in_progress', 'in-progress', 'completed', 'cancelled', 'no_show', 'no-show'],
         default: 'scheduled',
     },
     notes: String,
@@ -41,6 +49,19 @@ const appointmentSchema = new mongoose.Schema({
         ref: 'User',
     },
     cancelledAt: Date,
+    invoice: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Billing',
+    },
+    checkupFee: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+    isPaid: {
+        type: Boolean,
+        default: false,
+    },
 }, {
     timestamps: true,
 });
@@ -51,7 +72,7 @@ appointmentSchema.index({ patient: 1, appointmentDate: -1 });
 appointmentSchema.index({ status: 1 });
 
 // Virtual for end time
-appointmentSchema.virtual('endTime').get(function () {
+appointmentSchema.virtual('computedEndTime').get(function () {
     return new Date(this.appointmentDate.getTime() + this.duration * 60000);
 });
 

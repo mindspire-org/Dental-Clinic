@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,18 +42,40 @@ export default function NewPatient() {
         // Validate required fields
         if (!formData.firstName || !formData.lastName || !formData.dateOfBirth ||
             !formData.gender || !formData.phone) {
-            alert('Please fill in all required fields');
+            toast.error('Please fill in all required fields');
             return;
         }
 
         try {
             setLoading(true);
-            await patientsApi.create(formData);
-            alert('Patient created successfully!');
+
+            // Transform data to match backend schema
+            const patientData = {
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                dateOfBirth: formData.dateOfBirth,
+                gender: formData.gender,
+                phone: formData.phone,
+                email: formData.email || undefined,
+                address: {
+                    street: formData.address,
+                    city: formData.city,
+                    state: formData.state,
+                    zipCode: formData.zipCode
+                },
+                emergencyContact: {
+                    name: formData.emergencyContactName,
+                    phone: formData.emergencyContactPhone
+                },
+                notes: formData.medicalHistory
+            };
+
+            await patientsApi.create(patientData);
+            toast.success('Patient created successfully!');
             navigate('/patients');
         } catch (error) {
             console.error('Error creating patient:', error);
-            alert('Failed to create patient. Please try again.');
+            toast.error('Failed to create patient. Please try again.');
         } finally {
             setLoading(false);
         }

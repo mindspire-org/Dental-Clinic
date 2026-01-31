@@ -12,6 +12,7 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { Upload, Download, Trash2, FileText, Calendar, Eye } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
 import { documentsApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface Document {
     _id: string;
@@ -23,6 +24,8 @@ interface Document {
     };
     fileUrl: string;
     fileSize: number;
+    isFolder?: boolean;
+    mimeType?: string;
     uploadedBy: {
         firstName: string;
         lastName: string;
@@ -48,9 +51,27 @@ export default function DocumentList() {
             setDocuments(response.data.documents);
         } catch (error) {
             console.error('Error fetching documents:', error);
+            toast.error('Failed to load documents');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleView = (document: Document) => {
+        if (!document.fileUrl) return;
+        window.open(document.fileUrl, '_blank');
+    };
+
+    const handleDownload = (document: Document) => {
+        if (!document.fileUrl) return;
+        const a = window.document.createElement('a');
+        a.href = document.fileUrl;
+        a.target = '_blank';
+        a.rel = 'noreferrer';
+        a.download = document.title || 'download';
+        window.document.body.appendChild(a);
+        a.click();
+        window.document.body.removeChild(a);
     };
 
     const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,14 +83,17 @@ export default function DocumentList() {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('title', file.name);
-            formData.append('category', 'general');
+            formData.append('category', 'other');
 
             await documentsApi.upload(formData);
+            toast.success('Uploaded');
             fetchDocuments();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error uploading document:', error);
+            toast.error(error?.message || 'Upload failed');
         } finally {
             setUploading(false);
+            event.target.value = '';
         }
     };
 
@@ -83,9 +107,11 @@ export default function DocumentList() {
         try {
             await documentsApi.delete(selectedDocument._id);
             setShowDeleteDialog(false);
+            toast.success('Deleted');
             fetchDocuments();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error deleting document:', error);
+            toast.error(error?.message || 'Delete failed');
         }
     };
 
@@ -96,14 +122,16 @@ export default function DocumentList() {
     };
 
     const getCategoryColor = (category: string) => {
+        const c = String(category || '').toLowerCase();
         const colors: Record<string, string> = {
-            xray: 'bg-blue-100 text-blue-800',
+            'x-ray': 'bg-blue-100 text-blue-800',
             report: 'bg-green-100 text-green-800',
-            consent: 'bg-purple-100 text-purple-800',
+            'consent-form': 'bg-purple-100 text-purple-800',
             prescription: 'bg-orange-100 text-orange-800',
-            general: 'bg-gray-100 text-gray-800',
+            insurance: 'bg-yellow-100 text-yellow-800',
+            other: 'bg-gray-100 text-gray-800',
         };
-        return colors[category] || colors.general;
+        return colors[c] || colors.other;
     };
 
     const columns: ColumnDef<Document>[] = [
@@ -168,10 +196,20 @@ export default function DocumentList() {
             header: 'Actions',
             cell: ({ row }) => (
                 <div className="flex items-center gap-2">
-                    <Button size="sm" variant="ghost">
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleView(row.original)}
+                        disabled={!row.original.fileUrl}
+                    >
                         <Eye className="w-4 h-4" />
                     </Button>
-                    <Button size="sm" variant="ghost">
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDownload(row.original)}
+                        disabled={!row.original.fileUrl}
+                    >
                         <Download className="w-4 h-4" />
                     </Button>
                     <Button

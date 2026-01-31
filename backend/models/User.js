@@ -24,8 +24,12 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['admin', 'dentist', 'receptionist'],
+        enum: ['superadmin', 'admin', 'dentist', 'receptionist'],
         default: 'receptionist',
+    },
+    permissions: {
+        type: [String],
+        default: [],
     },
     firstName: {
         type: String,
@@ -38,6 +42,27 @@ const userSchema = new mongoose.Schema({
         trim: true,
     },
     phone: {
+        type: String,
+        trim: true,
+    },
+    specialization: {
+        type: String,
+        trim: true,
+    },
+    licenseNumber: {
+        type: String,
+        trim: true,
+    },
+    experienceYears: {
+        type: Number,
+        min: 0,
+    },
+    checkupFee: {
+        type: Number,
+        min: 0,
+        default: 0,
+    },
+    address: {
         type: String,
         trim: true,
     },

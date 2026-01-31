@@ -12,7 +12,10 @@ import {
     Filter,
     Download,
     Eye,
-    Calendar
+    Calendar,
+    Users,
+    Image as ImageIcon,
+    ClipboardList
 } from 'lucide-react';
 import {
     Table,
@@ -101,6 +104,54 @@ export default function PatientRecords() {
         );
     }
 
+    const now = new Date();
+    const totalRecords = records.length;
+    const byCategory = records.reduce((acc, r) => {
+        const key = (r.category || 'general').toLowerCase();
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+    const thisMonth = records.filter((r) => {
+        const d = new Date(r.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+    const uniquePatients = new Set(
+        records
+            .map((r) => (r.patient ? `${r.patient.firstName} ${r.patient.lastName}` : null))
+            .filter(Boolean) as string[]
+    ).size;
+
+    const summaryCards = [
+        {
+            title: 'Total Records',
+            value: totalRecords,
+            icon: FileText,
+            className: 'bg-gradient-to-br from-primary/15 to-primary/5 border-primary/20',
+            iconClassName: 'text-primary',
+        },
+        {
+            title: 'X-Rays',
+            value: byCategory.xray || 0,
+            icon: ImageIcon,
+            className: 'bg-gradient-to-br from-info/15 to-info/5 border-info/20',
+            iconClassName: 'text-info',
+        },
+        {
+            title: 'Reports',
+            value: byCategory.report || 0,
+            icon: ClipboardList,
+            className: 'bg-gradient-to-br from-success/15 to-success/5 border-success/20',
+            iconClassName: 'text-success',
+        },
+        {
+            title: 'Patients',
+            value: uniquePatients,
+            icon: Users,
+            className: 'bg-gradient-to-br from-warning/15 to-warning/5 border-warning/20',
+            iconClassName: 'text-warning',
+        },
+    ];
+
     return (
         <DashboardLayout>
             <div className="space-y-6">
@@ -113,6 +164,27 @@ export default function PatientRecords() {
                         <Download className="w-4 h-4 mr-2" />
                         Export All
                     </Button>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {summaryCards.map((c) => (
+                        <Card key={c.title} className={`shadow-card border ${c.className}`}>
+                            <CardContent className="p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <div className="text-sm text-muted-foreground">{c.title}</div>
+                                        <div className="text-2xl font-bold text-foreground mt-1">{c.value}</div>
+                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-background/60 border flex items-center justify-center">
+                                        <c.icon className={`w-5 h-5 ${c.iconClassName}`} />
+                                    </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-2">
+                                    {thisMonth} uploaded this month
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
 
                 <Card className="shadow-card">

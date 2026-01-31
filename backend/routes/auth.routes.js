@@ -7,8 +7,14 @@ const validate = require('../middleware/validate.middleware');
 
 // Validation rules
 const loginValidation = [
-    body('email').isEmail().withMessage('Please provide a valid email'),
+    body('email').notEmpty().withMessage('Email or username is required'),
     body('password').notEmpty().withMessage('Password is required'),
+];
+
+const ownerLoginValidation = [
+    body('email').notEmpty().withMessage('Email or username is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+    body('licenseKey').notEmpty().withMessage('License key is required'),
 ];
 
 const registerValidation = [
@@ -21,6 +27,7 @@ const registerValidation = [
 
 // Routes
 router.post('/login', loginValidation, validate, authController.login);
+router.post('/owner-login', ownerLoginValidation, validate, authController.ownerLogin);
 router.post('/register', registerValidation, validate, authController.register);
 router.post('/logout', auth, authController.logout);
 router.get('/me', auth, authController.getMe);

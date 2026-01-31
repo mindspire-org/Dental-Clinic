@@ -9,7 +9,6 @@ const staffSchema = new mongoose.Schema({
     employeeId: {
         type: String,
         unique: true,
-        required: true,
     },
     specialization: {
         type: String,
@@ -31,7 +30,7 @@ const staffSchema = new mongoose.Schema({
     licenseNumber: String,
     hireDate: {
         type: Date,
-        required: [true, 'Hire date is required'],
+        default: Date.now,
     },
     schedule: [{
         day: {
@@ -76,7 +75,7 @@ const staffSchema = new mongoose.Schema({
 });
 
 // Auto-generate employee ID
-staffSchema.pre('save', async function (next) {
+staffSchema.pre('validate', async function (next) {
     if (!this.employeeId) {
         const count = await mongoose.model('Staff').countDocuments();
         this.employeeId = `EMP${String(count + 1).padStart(5, '0')}`;

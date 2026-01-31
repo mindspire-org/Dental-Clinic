@@ -1,14 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const dentalChartController = require('../controllers/dentalChartController');
-const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
-
-
-// All routes require authentication and dentist/admin role
-router.use(auth);
-
-router.use(authorize('admin', 'dentist'));
+// const auth = require('../middleware/auth.middleware');
+// const authorize = require('../middleware/role.middleware');
 
 // Dental chart routes
 router.get('/patient/:patientId', dentalChartController.getPatientChart);

@@ -15,7 +15,7 @@ const paymentSchema = new mongoose.Schema({
     patient: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Patient',
-        required: true,
+        required: false,
         index: true
     },
     amount: {
@@ -41,7 +41,7 @@ const paymentSchema = new mongoose.Schema({
     receivedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: false
     },
     status: {
         type: String,
@@ -53,7 +53,7 @@ const paymentSchema = new mongoose.Schema({
 });
 
 // Auto-generate paymentId before saving
-paymentSchema.pre('save', async function (next) {
+paymentSchema.pre('validate', async function (next) {
     if (!this.paymentId) {
         const count = await mongoose.model('Payment').countDocuments();
         this.paymentId = `PAY-${String(count + 1).padStart(6, '0')}`;

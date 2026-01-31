@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 
 const documentSchema = new mongoose.Schema({
+    parent: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Document',
+        default: null,
+        index: true,
+    },
+    isFolder: {
+        type: Boolean,
+        default: false,
+        index: true,
+    },
     patient: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Patient',
@@ -29,6 +40,8 @@ const documentSchema = new mongoose.Schema({
             'x-ray',
             'photo',
             'report',
+            'treatment-plan',
+            'lab-report',
             'prescription',
             'invoice',
             'insurance',
@@ -37,11 +50,11 @@ const documentSchema = new mongoose.Schema({
     },
     fileName: {
         type: String,
-        required: [true, 'File name is required'],
+        required: function () { return !this.isFolder; },
     },
     filePath: {
         type: String,
-        required: [true, 'File path is required'],
+        required: function () { return !this.isFolder; },
     },
     fileSize: {
         type: Number,
@@ -64,6 +77,7 @@ const documentSchema = new mongoose.Schema({
 // Index for queries
 documentSchema.index({ patient: 1, uploadDate: -1 });
 documentSchema.index({ category: 1 });
+documentSchema.index({ parent: 1, uploadDate: -1 });
 documentSchema.index({ title: 'text', description: 'text', tags: 'text' });
 
 module.exports = mongoose.model('Document', documentSchema);
