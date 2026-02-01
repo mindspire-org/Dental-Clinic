@@ -116,7 +116,7 @@ export default function PrescriptionList() {
     useEffect(() => {
         let mounted = true;
         const load = async () => {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             if (!token) {
                 setAuthMissing(true);
                 setLoading(false);
@@ -182,7 +182,7 @@ export default function PrescriptionList() {
     }, []);
 
     const fetchPrescriptions = async () => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) {
             setAuthMissing(true);
             return;

@@ -51,7 +51,12 @@ exports.getAllLabWork = async (req, res, next) => {
 
 exports.getLabWorkById = async (req, res, next) => {
     try {
-        const labWork = await LabWork.findById(req.params.id)
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const labWork = await LabWork.findOne(query)
             .populate('patient')
             .populate('dentist')
             .populate('treatment');
@@ -63,7 +68,7 @@ exports.getLabWorkById = async (req, res, next) => {
 exports.createLabWork = async (req, res, next) => {
     try {
         const payload = { ...req.body };
-        if (!payload.dentist && req.user?._id) {
+        if (!payload.dentist && req.user?.role === 'dentist' && req.user?._id) {
             payload.dentist = req.user._id;
         }
         const labWork = await LabWork.create(payload);
@@ -73,8 +78,13 @@ exports.createLabWork = async (req, res, next) => {
 
 exports.updateLabWork = async (req, res, next) => {
     try {
-        const labWork = await LabWork.findByIdAndUpdate(
-            req.params.id,
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const labWork = await LabWork.findOneAndUpdate(
+            query,
             req.body,
             { new: true, runValidators: true }
         )
@@ -87,7 +97,13 @@ exports.updateLabWork = async (req, res, next) => {
 
 exports.deleteLabWork = async (req, res, next) => {
     try {
-        await LabWork.findByIdAndDelete(req.params.id);
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const deleted = await LabWork.findOneAndDelete(query);
+        if (!deleted) return res.status(404).json({ status: 'error', message: 'Not found' });
         res.status(200).json({ status: 'success', message: 'Deleted' });
     } catch (error) { next(error); }
 };

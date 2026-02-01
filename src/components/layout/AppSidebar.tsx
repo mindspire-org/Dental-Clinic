@@ -168,7 +168,11 @@ const navItems: NavItem[] = [
     title: 'Staff',
     url: '/staff',
     icon: UserCog,
-    roles: ['admin']
+    roles: ['admin'],
+    children: [
+      { title: 'Staff List', url: '/staff' },
+      { title: 'Role Management', url: '/staff/role-management' }
+    ]
   },
   {
     title: 'Dentists',
@@ -218,6 +222,7 @@ export function AppSidebar() {
     } catch {
       // ignore
     }
+    sessionStorage.removeItem('token');
     localStorage.removeItem('token');
     toast.success('Logged out');
     resetAuth();
@@ -269,13 +274,16 @@ export function AppSidebar() {
   });
 
   const filteredItems = navItems
-    .filter(item => item.roles.includes(role))
+    .filter((item) => {
+      const key = moduleKeyByTitle[item.title];
+      if (key) return true;
+      return item.roles.includes(role);
+    })
     .filter((item) => {
       if (role === 'superadmin') return true;
       if (!license?.isActive) return item.title === 'Logout';
       const key = moduleKeyByTitle[item.title];
       if (key && Array.isArray(license?.enabledModules) && !license.enabledModules.includes(key)) return false;
-      if (role !== 'admin') return true;
       if (!key) return true;
       return permissions.includes(key);
     });
@@ -330,7 +338,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link to="/" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow overflow-hidden">
-            <img src="/logo.png" alt="DentalVerse Logo" className="w-full h-full object-cover" />
+            <img src="/Dental.jpg" alt="Dental Care Logo" className="w-full h-full object-contain p-1" />
           </div>
           {!collapsed && (
             <div className="animate-fade-in">

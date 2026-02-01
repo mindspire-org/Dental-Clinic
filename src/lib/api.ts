@@ -3,7 +3,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper function to get auth headers
 const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     return {
         'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` })
@@ -393,6 +393,10 @@ export const staffApi = {
         return apiRequest(`/staff${query ? `?${query}` : ''}`);
     },
     getById: (id: string) => apiRequest(`/staff/${id}`),
+    getRoleManagementModules: () => apiRequest('/staff/role-management/modules'),
+    getRoleManagementUsers: () => apiRequest('/staff/role-management/users'),
+    setRoleManagementUserPermissions: (userId: string, payload: { permissions: string[] }) =>
+        apiRequest(`/staff/role-management/users/${userId}/permissions`, { method: 'PUT', body: JSON.stringify(payload) }),
     create: (data: any) => apiRequest('/staff', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -453,10 +457,11 @@ export const documentsApi = {
     },
     getById: (id: string) => apiRequest(`/documents/${id}`),
     upload: async (formData: FormData) => {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
         const res = await fetch(`${API_URL}/documents/upload`, {
             method: 'POST',
             headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: formData,
         });

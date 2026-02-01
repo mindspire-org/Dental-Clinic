@@ -1,5 +1,6 @@
 const Staff = require('../models/Staff');
 const User = require('../models/User');
+const { MODULE_KEYS } = require('../middleware/permissions.middleware');
 
 const allowedSpecializations = new Set([
     'general-dentistry',
@@ -27,6 +28,27 @@ const normalizeSpecialization = (value) => {
         .replace(/[^a-z-]/g, '');
     if (allowedSpecializations.has(normalized)) return normalized;
     return 'other';
+};
+
+const defaultPermissionsByRole = {
+    admin: MODULE_KEYS,
+    dentist: [
+        'dashboard',
+        'patients',
+        'appointments',
+        'dental-chart',
+        'treatments',
+        'prescriptions',
+        'lab-work',
+        'documents',
+    ],
+    receptionist: [
+        'dashboard',
+        'patients',
+        'appointments',
+        'billing',
+        'documents',
+    ],
 };
 
 const generateUsername = async (email, firstName, lastName) => {
@@ -103,6 +125,7 @@ exports.createStaff = async (req, res, next) => {
         const username = requestedUsername || await generateUsername(email, firstName, lastName);
         const tempPassword = password || `Temp${Math.random().toString(36).slice(2, 10)}!`;
         const normalizedSpecialization = normalizeSpecialization(specialization);
+        const defaultPerms = defaultPermissionsByRole[safeRole] || [];
 
         const user = await User.create({
             username,
@@ -112,6 +135,7 @@ exports.createStaff = async (req, res, next) => {
             lastName,
             phone,
             role: safeRole,
+            permissions: defaultPerms,
             specialization: normalizedSpecialization,
         });
 
@@ -179,5 +203,44 @@ exports.deleteStaff = async (req, res, next) => {
         await User.findByIdAndDelete(staffDoc.user);
 
         res.status(200).json({ status: 'success', message: 'Deleted' });
+    } catch (error) { next(error); }
+};
+
+exports.getRoleManagementModules = async (req, res, next) => {
+    try {
+        const enabled = Array.isArray(req.license?.enabledModules) && req.license.enabledModules.length
+            ? req.license.enabledModules
+            : MODULE_KEYS;
+        const modules = MODULE_KEYS.filter((k) => enabled.includes(k));
+        res.status(200).json({ status: 'success', data: { modules } });
+    } catch (error) { next(error); }
+};
+
+exports.getRoleManagementUsers = async (req, res, next) => {
+    try {
+        const users = await User.find({ role: { $in: ['dentist', 'receptionist'] } })
+            .select('firstName lastName email username role permissions isActive')
+            .sort('firstName lastName');
+        res.status(200).json({ status: 'success', data: { users } });
+    } catch (error) { next(error); }
+};
+
+exports.setRoleManagementUserPermissions = async (req, res, next) => {
+    try {
+        const { userId } = req.params;
+        const { permissions } = req.body || {};
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ status: 'error', message: 'User not found' });
+        }
+        if (!['dentist', 'receptionist'].includes(user.role)) {
+            return res.status(400).json({ status: 'error', message: 'Target user must be dentist or receptionist' });
+        }
+
+        user.permissions = Array.isArray(permissions) ? permissions : [];
+        await user.save();
+
+        res.status(200).json({ status: 'success', data: { user } });
     } catch (error) { next(error); }
 };

@@ -63,8 +63,6 @@ const requireModuleAccess = (moduleKey) => {
                 });
             }
 
-            if (req.user?.role !== 'admin') return next();
-
             const perms = Array.isArray(req.user.permissions) ? req.user.permissions : [];
             if (!perms.includes(moduleKey)) {
                 return res.status(403).json({

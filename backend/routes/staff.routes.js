@@ -11,6 +11,10 @@ const authorize = require('../middleware/role.middleware');
 router.use(auth);
 router.use(authorize('admin'));
 
+router.get('/role-management/modules', staffController.getRoleManagementModules);
+router.get('/role-management/users', staffController.getRoleManagementUsers);
+router.put('/role-management/users/:userId/permissions', staffController.setRoleManagementUserPermissions);
+
 router.get('/', staffController.getAllStaff);
 router.get('/:id', staffController.getStaffById);
 router.post('/', staffController.createStaff);

@@ -49,7 +49,7 @@ exports.getPrescriptionById = async (req, res, next) => {
 exports.createPrescription = async (req, res, next) => {
     try {
         const payload = { ...req.body };
-        if (!payload.dentist && req.user?._id) {
+        if (!payload.dentist && req.user?.role === 'dentist' && req.user?._id) {
             payload.dentist = req.user._id;
         }
         const prescription = await Prescription.create(payload);

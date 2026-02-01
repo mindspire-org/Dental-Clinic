@@ -5,11 +5,9 @@ const prescriptionController = require('../controllers/prescriptionController');
 // const authorize = require('../middleware/role.middleware');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 // router.use(auth);
 router.use(auth);
-router.use(authorize('admin', 'dentist'));
 
 router.get('/', prescriptionController.getAllPrescriptions);
 router.get('/patient/:patientId', prescriptionController.getPatientPrescriptions);

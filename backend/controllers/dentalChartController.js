@@ -1,6 +1,10 @@
 const DentalChart = require('../models/DentalChart');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
+const Appointment = require('../models/Appointment');
+const Treatment = require('../models/Treatment');
+const LabWork = require('../models/LabWork');
+const Prescription = require('../models/Prescription');
 
 const getUpdaterId = async (req) => {
     const direct = req.user?._id || req.user?.id;
@@ -37,10 +41,34 @@ const fdiAdultTeeth = () => {
     }));
 };
 
+const getDentistPatientIds = async (dentistId) => {
+    const [fromAppointments, fromTreatments, fromLabWork, fromPrescriptions] = await Promise.all([
+        Appointment.find({ dentist: dentistId }).distinct('patient'),
+        Treatment.find({ dentist: dentistId }).distinct('patient'),
+        LabWork.find({ dentist: dentistId }).distinct('patient'),
+        Prescription.find({ dentist: dentistId }).distinct('patient'),
+    ]);
+
+    const ids = new Set([
+        ...fromAppointments.map(String),
+        ...fromTreatments.map(String),
+        ...fromLabWork.map(String),
+        ...fromPrescriptions.map(String),
+    ]);
+    return Array.from(ids);
+};
+
 // Get patient's dental chart
 exports.getPatientChart = async (req, res, next) => {
     try {
         const { patientId } = req.params;
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(patientId))) {
+                return res.status(404).json({ status: 'error', message: 'Patient not found' });
+            }
+        }
 
         // Verify patient exists
         const patient = await Patient.findById(patientId);
@@ -81,6 +109,13 @@ exports.updateChart = async (req, res, next) => {
     try {
         const { patientId } = req.params;
         const { teeth } = req.body;
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(patientId))) {
+                return res.status(404).json({ status: 'error', message: 'Dental chart not found' });
+            }
+        }
 
         const chart = await DentalChart.findOne({ patient: patientId });
 
@@ -130,6 +165,13 @@ exports.addToothTreatment = async (req, res, next) => {
         const { patientId, toothNumber } = req.params;
         const { treatment, treatmentType, description, notes, status } = req.body;
 
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(patientId))) {
+                return res.status(404).json({ status: 'error', message: 'Dental chart not found' });
+            }
+        }
+
         const chart = await DentalChart.findOne({ patient: patientId });
         if (!chart) {
             return res.status(404).json({
@@ -175,6 +217,13 @@ exports.updateToothTreatment = async (req, res, next) => {
     try {
         const { patientId, toothNumber, treatmentId } = req.params;
         const { status, notes, condition, treatmentType, description } = req.body;
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(patientId))) {
+                return res.status(404).json({ status: 'error', message: 'Dental chart not found' });
+            }
+        }
 
         const chart = await DentalChart.findOne({ patient: patientId });
         if (!chart) {

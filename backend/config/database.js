@@ -4,7 +4,12 @@ const Staff = require('../models/Staff');
 
 const connectDB = async () => {
     try {
-        const conn = await mongoose.connect(process.env.MONGODB_URI, {
+        const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+        if (!mongoUri) {
+            throw new Error('MongoDB connection string missing. Set MONGODB_URI (or MONGO_URI).');
+        }
+
+        const conn = await mongoose.connect(mongoUri, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
         });

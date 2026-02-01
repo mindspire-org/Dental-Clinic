@@ -98,14 +98,16 @@ export default function AppointmentCalendar() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [appointmentsRes, patientsRes, staffRes] = await Promise.all([
-                appointmentsApi.getAll({ date: selectedDate }),
+            const appointmentsRes = await appointmentsApi.getAll({ date: selectedDate });
+            setAppointments(appointmentsRes.data.appointments);
+
+            const [patientsRes, staffRes] = await Promise.allSettled([
                 patientsApi.getAll({ limit: 100 }),
                 dentistsApi.getAll({ limit: 50 }),
             ]);
-            setAppointments(appointmentsRes.data.appointments);
-            setPatients(patientsRes.data.patients);
-            setDentists(staffRes.data.dentists);
+
+            setPatients(patientsRes.status === 'fulfilled' ? patientsRes.value.data.patients : []);
+            setDentists(staffRes.status === 'fulfilled' ? staffRes.value.data.dentists : []);
         } catch (error) {
             console.error('Error fetching data:', error);
         } finally {

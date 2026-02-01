@@ -5,11 +5,9 @@ const reportController = require('../controllers/reportController');
 // const authorize = require('../middleware/role.middleware');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 // router.use(auth);
 router.use(auth);
-router.use(authorize('admin'));
 
 router.get('/financial', reportController.getFinancialReport);
 router.get('/clinical', reportController.getClinicalReport);

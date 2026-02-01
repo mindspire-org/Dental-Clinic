@@ -92,7 +92,7 @@ export default function LabWorkList() {
     useEffect(() => {
         let mounted = true;
         const load = async () => {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             if (!token) {
                 setAuthMissing(true);
                 setLoading(false);
@@ -140,7 +140,7 @@ export default function LabWorkList() {
     }, []);
 
     const fetchLabWorks = async () => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) {
             setAuthMissing(true);
             return;

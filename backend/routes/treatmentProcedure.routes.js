@@ -3,11 +3,9 @@ const router = express.Router();
 const treatmentProcedureController = require('../controllers/treatmentProcedureController');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 if (process.env.NODE_ENV !== 'development') {
     router.use(auth);
-    router.use(authorize('admin', 'dentist'));
 }
 
 router.get('/', treatmentProcedureController.getAllTreatmentProcedures);

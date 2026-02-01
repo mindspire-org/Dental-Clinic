@@ -5,12 +5,10 @@ const treatmentController = require('../controllers/treatmentController');
 // const authorize = require('../middleware/role.middleware');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 // router.use(auth);
 if (process.env.NODE_ENV !== 'development') {
     router.use(auth);
-    router.use(authorize('admin', 'dentist'));
 }
 
 router.get('/', treatmentController.getAllTreatments);

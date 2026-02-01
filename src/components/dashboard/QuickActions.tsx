@@ -1,6 +1,7 @@
 import { UserPlus, CalendarPlus, FileText, CreditCard, Stethoscope, FlaskConical } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { useRole } from '@/contexts/RoleContext';
 
 interface QuickAction {
   icon: React.ElementType;
@@ -8,6 +9,7 @@ interface QuickAction {
   description: string;
   color: string;
   bgColor: string;
+  moduleKey: string;
 }
 
 const actions: QuickAction[] = [
@@ -16,42 +18,48 @@ const actions: QuickAction[] = [
     label: 'New Patient',
     description: 'Register patient',
     color: 'text-primary',
-    bgColor: 'bg-primary/10 hover:bg-primary/20'
+    bgColor: 'bg-primary/10 hover:bg-primary/20',
+    moduleKey: 'patients'
   },
   {
     icon: CalendarPlus,
     label: 'Appointment',
     description: 'Schedule visit',
     color: 'text-accent',
-    bgColor: 'bg-accent/10 hover:bg-accent/20'
+    bgColor: 'bg-accent/10 hover:bg-accent/20',
+    moduleKey: 'appointments'
   },
   {
     icon: Stethoscope,
     label: 'Treatment',
     description: 'Start treatment',
     color: 'text-chart-3',
-    bgColor: 'bg-chart-3/10 hover:bg-chart-3/20'
+    bgColor: 'bg-chart-3/10 hover:bg-chart-3/20',
+    moduleKey: 'treatments'
   },
   {
     icon: FileText,
     label: 'Prescription',
     description: 'Write Rx',
     color: 'text-chart-4',
-    bgColor: 'bg-chart-4/10 hover:bg-chart-4/20'
+    bgColor: 'bg-chart-4/10 hover:bg-chart-4/20',
+    moduleKey: 'prescriptions'
   },
   {
     icon: FlaskConical,
     label: 'Lab Order',
     description: 'Request lab work',
     color: 'text-warning',
-    bgColor: 'bg-warning/10 hover:bg-warning/20'
+    bgColor: 'bg-warning/10 hover:bg-warning/20',
+    moduleKey: 'lab-work'
   },
   {
     icon: CreditCard,
     label: 'Invoice',
     description: 'Create bill',
     color: 'text-chart-5',
-    bgColor: 'bg-chart-5/10 hover:bg-chart-5/20'
+    bgColor: 'bg-chart-5/10 hover:bg-chart-5/20',
+    moduleKey: 'billing'
   },
 ];
 
@@ -60,9 +68,24 @@ interface QuickActionsProps {
 }
 
 export function QuickActions({ className }: QuickActionsProps) {
+  const { authRole, license, permissions } = useRole();
+
+  const filteredActions = useMemo(() => {
+    if (authRole === 'superadmin') return actions;
+    return actions.filter((a) => {
+      if (Array.isArray(license?.enabledModules) && license.enabledModules.length && !license.enabledModules.includes(a.moduleKey)) {
+        return false;
+      }
+      if (Array.isArray(permissions) && !permissions.includes(a.moduleKey)) {
+        return false;
+      }
+      return true;
+    });
+  }, [authRole, license, permissions]);
+
   return (
     <div className={cn('grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3', className)}>
-      {actions.map((action, index) => (
+      {filteredActions.map((action, index) => (
         <button
           key={action.label}
           className={cn(

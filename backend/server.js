@@ -21,7 +21,13 @@ connectDB();
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:8080'],
+  origin: (origin, cb) => {
+    // Electron (file://) often sends no Origin or 'null'
+    if (!origin || origin === 'null') return cb(null, true);
+    const allowed = ['http://localhost:5173', 'http://localhost:8080'];
+    if (allowed.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
   credentials: true
 }));
 app.use(express.json());

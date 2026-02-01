@@ -212,17 +212,28 @@ function TreatmentsContent() {
         setLoading(true);
         await fetchTreatments();
 
-        const [patientsRes, dentistsRes] = await Promise.all([
+        const [patientsRes, dentistsRes, proceduresRes] = await Promise.allSettled([
           patientsApi.getAll({ limit: 200 }),
           dentistsApi.getAll({ isActive: true }),
+          treatmentProceduresApi.getAll({ isActive: true }),
         ]);
 
-        const proceduresRes = await treatmentProceduresApi.getAll({ isActive: true });
-
         if (!isMounted) return;
-        setPatients((patientsRes?.data?.patients || []) as OptionItem[]);
-        setDentists((dentistsRes?.data?.dentists || []) as OptionItem[]);
-        setProcedureOptions((proceduresRes?.data?.procedures || []) as ProcedureOption[]);
+        setPatients(
+          patientsRes.status === 'fulfilled'
+            ? ((patientsRes.value?.data?.patients || []) as OptionItem[])
+            : ([] as OptionItem[])
+        );
+        setDentists(
+          dentistsRes.status === 'fulfilled'
+            ? ((dentistsRes.value?.data?.dentists || []) as OptionItem[])
+            : ([] as OptionItem[])
+        );
+        setProcedureOptions(
+          proceduresRes.status === 'fulfilled'
+            ? ((proceduresRes.value?.data?.procedures || []) as ProcedureOption[])
+            : ([] as ProcedureOption[])
+        );
       } catch (e) {
         if (!isMounted) return;
         console.error('Error fetching treatments:', e);

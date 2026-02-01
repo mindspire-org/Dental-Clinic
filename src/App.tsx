@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useNavigate, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, useNavigate, Navigate } from "react-router-dom";
 import { useEffect, useState } from 'react';
 import { RoleProvider } from "./contexts/RoleContext";
 import Index from "./pages/Index";
@@ -32,6 +32,7 @@ import Stock from "./pages/inventory/Stock";
 import Orders from "./pages/inventory/Orders";
 import Suppliers from "./pages/inventory/Suppliers";
 import StaffList from "./pages/staff/StaffList";
+import RoleManagement from "./pages/staff/RoleManagement";
 import DentistList from "./pages/dentists/DentistList";
 import Reports from "./pages/Reports";
 import ClinicalReports from "./pages/reports/ClinicalReports";
@@ -42,6 +43,7 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import OwnerLogin from "./pages/OwnerLogin";
 import License from "./pages/License";
+import AccessDenied from "./pages/AccessDenied";
 import { useRole } from "./contexts/RoleContext";
 import { authApi } from "./lib/api";
 
@@ -64,9 +66,25 @@ const GlobalHotkeys = () => {
   return null;
 };
 
+const RequireAuth = ({ children }: { children: JSX.Element }) => {
+  const { authRole, license, resetAuth } = useRole();
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+
+  if (!token) return <Navigate to="/login" replace />;
+
+  if (authRole !== 'superadmin' && !license?.isActive) {
+    sessionStorage.removeItem('token');
+    localStorage.removeItem('token');
+    resetAuth();
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+};
+
 const RequireModule = ({ moduleKey, children }: { moduleKey: string; children: JSX.Element }) => {
   const { authRole, license, permissions, setAuth, resetAuth } = useRole();
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -92,6 +110,7 @@ const RequireModule = ({ moduleKey, children }: { moduleKey: string; children: J
           });
         }
       } catch {
+        sessionStorage.removeItem('token');
         localStorage.removeItem('token');
         resetAuth();
       } finally {
@@ -108,13 +127,18 @@ const RequireModule = ({ moduleKey, children }: { moduleKey: string; children: J
   if (checking) return null;
 
   if (authRole !== 'superadmin' && !license?.isActive) {
+    sessionStorage.removeItem('token');
     localStorage.removeItem('token');
     resetAuth();
     return <Navigate to="/login" replace />;
   }
 
-  if (authRole === 'admin' && !permissions.includes(moduleKey)) {
-    return <Navigate to="/" replace />;
+  if (authRole !== 'superadmin' && Array.isArray(license?.enabledModules) && license.enabledModules.length && !license.enabledModules.includes(moduleKey)) {
+    return <Navigate to="/access-denied" replace />;
+  }
+
+  if (authRole !== 'superadmin' && !permissions.includes(moduleKey)) {
+    return <Navigate to="/access-denied" replace />;
   }
 
   return children;
@@ -122,7 +146,7 @@ const RequireModule = ({ moduleKey, children }: { moduleKey: string; children: J
 
 const RequireSuperadmin = ({ children }: { children: JSX.Element }) => {
   const { authRole, setAuth, resetAuth } = useRole();
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -146,6 +170,7 @@ const RequireSuperadmin = ({ children }: { children: JSX.Element }) => {
           });
         }
       } catch {
+        sessionStorage.removeItem('token');
         localStorage.removeItem('token');
         resetAuth();
       } finally {
@@ -164,13 +189,15 @@ const RequireSuperadmin = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
+const Router = typeof window !== 'undefined' && window.location.protocol === 'file:' ? HashRouter : BrowserRouter;
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <RoleProvider>
-        <BrowserRouter
+        <Router
           future={{
             v7_startTransition: true,
             v7_relativeSplatPath: true,
@@ -180,6 +207,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/owner-login" element={<OwnerLogin />} />
+            <Route path="/access-denied" element={<RequireAuth><AccessDenied /></RequireAuth>} />
             <Route path="/license" element={<RequireSuperadmin><License /></RequireSuperadmin>} />
             <Route path="/" element={<RequireModule moduleKey="dashboard"><Index /></RequireModule>} />
 
@@ -225,6 +253,7 @@ const App = () => (
 
             <Route path="/staff" element={<RequireModule moduleKey="staff"><StaffList /></RequireModule>} />
             <Route path="/staff/list" element={<RequireModule moduleKey="staff"><StaffList /></RequireModule>} />
+            <Route path="/staff/role-management" element={<RequireModule moduleKey="staff"><RoleManagement /></RequireModule>} />
 
             <Route path="/dentists" element={<RequireModule moduleKey="dentists"><DentistList /></RequireModule>} />
 
@@ -240,7 +269,7 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
+        </Router>
       </RoleProvider>
     </TooltipProvider>
   </QueryClientProvider>

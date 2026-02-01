@@ -81,11 +81,11 @@ exports.getFinancialReport = async (req, res, next) => {
         const [revenueAgg, expenseAgg, outstandingAgg] = await Promise.all([
             Payment.aggregate([
                 { $match: paymentMatch },
-                { $group: { _id: null, total: { $sum: '$amount' } } },
+                { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
             ]),
             Expense.aggregate([
                 { $match: expenseMatch },
-                { $group: { _id: null, total: { $sum: '$amount' } } },
+                { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
             ]),
             Billing.aggregate([
                 { $match: billMatch },
@@ -102,9 +102,12 @@ exports.getFinancialReport = async (req, res, next) => {
 
         const totalRevenue = Number(revenueAgg?.[0]?.total || 0);
         const totalExpenses = Number(expenseAgg?.[0]?.total || 0);
+        const paymentsCount = Number(revenueAgg?.[0]?.count || 0);
+        const expensesCount = Number(expenseAgg?.[0]?.count || 0);
         const outstanding = Number(outstandingAgg?.[0]?.total || 0);
         const netProfit = totalRevenue - totalExpenses;
         const profitMarginPct = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+        const avgPayment = paymentsCount > 0 ? totalRevenue / paymentsCount : 0;
 
         let revenueChangePct = 0;
         if (prevRange) {
@@ -165,6 +168,72 @@ exports.getFinancialReport = async (req, res, next) => {
             });
         }
 
+        const [revenueByMethodAgg, expensesByCategoryAgg, invoicesByStatusAgg, recentPayments, recentExpenses, topOutstandingInvoices] = await Promise.all([
+            Payment.aggregate([
+                { $match: paymentMatch },
+                { $group: { _id: '$paymentMethod', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+                { $sort: { total: -1 } },
+            ]),
+            Expense.aggregate([
+                { $match: expenseMatch },
+                { $group: { _id: '$category', total: { $sum: '$amount' }, count: { $sum: 1 } } },
+                { $sort: { total: -1 } },
+            ]),
+            Billing.aggregate([
+                { $match: { invoiceDate: { $gte: baseRange.start, $lte: baseRange.end } } },
+                {
+                    $project: {
+                        status: 1,
+                        total: 1,
+                        paidAmount: 1,
+                        balance: {
+                            $max: [0, { $subtract: ['$total', '$paidAmount'] }],
+                        },
+                    },
+                },
+                {
+                    $group: {
+                        _id: '$status',
+                        count: { $sum: 1 },
+                        billed: { $sum: '$total' },
+                        paid: { $sum: '$paidAmount' },
+                        outstanding: { $sum: '$balance' },
+                    },
+                },
+                { $sort: { count: -1 } },
+            ]),
+            Payment.find(paymentMatch)
+                .sort({ paymentDate: -1 })
+                .limit(10)
+                .select('paymentId amount paymentDate paymentMethod status transactionId invoice patient')
+                .populate('patient', 'firstName lastName')
+                .populate('invoice', 'invoiceNumber total paidAmount status')
+                .lean(),
+            Expense.find(expenseMatch)
+                .sort({ expenseDate: -1 })
+                .limit(10)
+                .select('expenseId category description amount expenseDate vendor paymentMethod paymentStatus')
+                .lean(),
+            Billing.aggregate([
+                { $match: billMatch },
+                {
+                    $project: {
+                        invoiceNumber: 1,
+                        patientName: 1,
+                        status: 1,
+                        invoiceDate: 1,
+                        total: 1,
+                        paidAmount: 1,
+                        balance: {
+                            $max: [0, { $subtract: ['$total', '$paidAmount'] }],
+                        },
+                    },
+                },
+                { $sort: { balance: -1, invoiceDate: -1 } },
+                { $limit: 10 },
+            ]),
+        ]);
+
         res.status(200).json({
             status: 'success',
             data: {
@@ -175,9 +244,44 @@ exports.getFinancialReport = async (req, res, next) => {
                     outstanding,
                     profitMarginPct,
                     revenueChangePct,
+                    paymentsCount,
+                    expensesCount,
+                    avgPayment,
                 },
                 chart: {
                     revenueVsExpenses: series,
+                },
+                breakdown: {
+                    revenueByMethod: (revenueByMethodAgg || []).map((r) => ({
+                        method: r._id,
+                        total: Number(r.total || 0),
+                        count: Number(r.count || 0),
+                    })),
+                    expensesByCategory: (expensesByCategoryAgg || []).map((r) => ({
+                        category: r._id,
+                        total: Number(r.total || 0),
+                        count: Number(r.count || 0),
+                    })),
+                    invoicesByStatus: (invoicesByStatusAgg || []).map((r) => ({
+                        status: r._id,
+                        count: Number(r.count || 0),
+                        billed: Number(r.billed || 0),
+                        paid: Number(r.paid || 0),
+                        outstanding: Number(r.outstanding || 0),
+                    })),
+                    topOutstandingInvoices: (topOutstandingInvoices || []).map((inv) => ({
+                        invoiceNumber: inv.invoiceNumber,
+                        patientName: inv.patientName,
+                        status: inv.status,
+                        invoiceDate: inv.invoiceDate,
+                        total: Number(inv.total || 0),
+                        paidAmount: Number(inv.paidAmount || 0),
+                        balance: Number(inv.balance || 0),
+                    })),
+                },
+                recent: {
+                    payments: Array.isArray(recentPayments) ? recentPayments : [],
+                    expenses: Array.isArray(recentExpenses) ? recentExpenses : [],
                 },
                 range: {
                     start: baseRange.start,

@@ -250,7 +250,12 @@ exports.getStats = async (req, res, next) => {
 // Get recent activities
 exports.getRecentActivities = async (req, res, next) => {
     try {
-        const activities = await AuditLog.find()
+        const query = {};
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.user = req.user._id;
+        }
+
+        const activities = await AuditLog.find(query)
             .populate('user', 'firstName lastName')
             .sort({ timestamp: -1 })
             .limit(10);
@@ -283,10 +288,16 @@ exports.getRecentActivities = async (req, res, next) => {
 exports.getUpcomingAppointments = async (req, res, next) => {
     try {
         const now = new Date();
-        const appointments = await Appointment.find({
+        const query = {
             appointmentDate: { $gte: now },
             status: { $in: ['scheduled', 'confirmed'] }
-        })
+        };
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            query.dentist = req.user._id;
+        }
+
+        const appointments = await Appointment.find(query)
             .populate('patient', 'firstName lastName phone')
             .populate('dentist', 'firstName lastName')
             .sort({ appointmentDate: 1 })

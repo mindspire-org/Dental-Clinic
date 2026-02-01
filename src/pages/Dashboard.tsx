@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { dashboardApi } from '@/lib/api';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { useRole } from '@/contexts/RoleContext';
 
 interface DashboardStats {
     totalPatients: number;
@@ -76,6 +77,7 @@ interface RecentActivity {
 
 export default function Dashboard() {
     const navigate = useNavigate();
+    const { authRole, license, permissions } = useRole();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
     const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([]);
@@ -202,8 +204,9 @@ export default function Dashboard() {
         return colors[status] || 'bg-gray-100 text-gray-800';
     };
 
-    const quickActions = [
+    const allQuickActions = [
         {
+            moduleKey: 'patients',
             icon: UserPlus,
             title: 'New Patient',
             subtitle: 'Register patient',
@@ -213,6 +216,7 @@ export default function Dashboard() {
             path: '/patients/new'
         },
         {
+            moduleKey: 'appointments',
             icon: Calendar,
             title: 'Appointment',
             subtitle: 'Schedule visit',
@@ -222,6 +226,7 @@ export default function Dashboard() {
             path: '/appointments'
         },
         {
+            moduleKey: 'treatments',
             icon: Stethoscope,
             title: 'Treatment',
             subtitle: 'Start treatment',
@@ -231,6 +236,7 @@ export default function Dashboard() {
             path: '/treatments'
         },
         {
+            moduleKey: 'prescriptions',
             icon: Pill,
             title: 'Prescription',
             subtitle: 'Write Rx',
@@ -240,6 +246,7 @@ export default function Dashboard() {
             path: '/prescriptions'
         },
         {
+            moduleKey: 'lab-work',
             icon: FlaskConical,
             title: 'Lab Order',
             subtitle: 'Request lab work',
@@ -249,6 +256,7 @@ export default function Dashboard() {
             path: '/lab-work'
         },
         {
+            moduleKey: 'billing',
             icon: Receipt,
             title: 'Invoice',
             subtitle: 'Create bill',
@@ -258,6 +266,19 @@ export default function Dashboard() {
             path: '/billing'
         }
     ];
+
+    const quickActions = authRole === 'superadmin'
+        ? allQuickActions
+        : allQuickActions.filter((a) => {
+            const moduleKey = a.moduleKey;
+            if (Array.isArray(license?.enabledModules) && license.enabledModules.length && !license.enabledModules.includes(moduleKey)) {
+                return false;
+            }
+            if (Array.isArray(permissions) && !permissions.includes(moduleKey)) {
+                return false;
+            }
+            return true;
+        });
 
     const currentDate = new Date().toLocaleDateString('en-US', {
         weekday: 'long',

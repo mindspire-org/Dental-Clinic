@@ -27,19 +27,22 @@ const Login = () => {
             const lic = res?.data?.license;
 
             if (token) {
-                localStorage.setItem('token', token);
+                sessionStorage.setItem('token', token);
+                localStorage.removeItem('token');
             }
 
             const nextRole = (user?.role as UserRole) || role;
             const name = `${user?.firstName || ''} ${user?.lastName || ''}`.trim();
 
             if (nextRole !== 'superadmin' && !lic?.isActive) {
+                sessionStorage.removeItem('token');
                 localStorage.removeItem('token');
                 toast.error('License is not active. Please contact the software provider.');
                 return;
             }
 
             if (nextRole === 'admin' && (!Array.isArray(user?.permissions) || user.permissions.length === 0)) {
+                sessionStorage.removeItem('token');
                 localStorage.removeItem('token');
                 toast.error('No permissions assigned. Please ask Super Admin to enable modules.');
                 return;
@@ -74,7 +77,7 @@ const Login = () => {
                 {/* Left Side: Branding & Info (Visible on large screens) */}
                 <div className="hidden lg:flex flex-col justify-center space-y-6 p-8 animate-fade-in">
                     <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center shadow-2xl shadow-primary/20 overflow-hidden mb-4">
-                        <img src="/logo.png" alt="DentalVerse Logo" className="w-full h-full object-cover p-0" />
+                        <img src="/Dental.jpg" alt="Dental Care Logo" className="w-full h-full object-contain p-2" />
                     </div>
                     <div>
                         <h1 className="text-5xl font-bold tracking-tight text-slate-900 mb-4">DentalVerse</h1>
@@ -110,7 +113,7 @@ const Login = () => {
                     {/* Mobile Logo (Visible only on small screens) */}
                     <div className="lg:hidden text-center mb-8">
                         <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden">
-                            <img src="/logo.png" alt="DentalVerse Logo" className="w-full h-full object-cover" />
+                            <img src="/Dental.jpg" alt="Dental Care Logo" className="w-full h-full object-contain p-2" />
                         </div>
                         <h1 className="text-2xl font-bold text-slate-900">DentalVerse</h1>
                     </div>

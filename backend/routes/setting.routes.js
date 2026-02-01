@@ -5,13 +5,11 @@ const settingController = require('../controllers/settingController');
 // const authorize = require('../middleware/role.middleware');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 
 // All routes require authentication
 // router.use(auth);
 router.use(auth);
-router.use(authorize('admin'));
 
 // Settings routes
 router.get('/', settingController.getAllSettings);

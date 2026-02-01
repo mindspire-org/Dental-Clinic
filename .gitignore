@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+release/
+public/log.jpg
+
 .env
 backend/.env
 uploads/

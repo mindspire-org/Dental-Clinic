@@ -36,7 +36,8 @@ const OwnerLogin = () => {
                 return;
             }
 
-            localStorage.setItem('token', token);
+            sessionStorage.setItem('token', token);
+            localStorage.removeItem('token');
             setAuth({
                 role: 'superadmin',
                 userName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Owner',

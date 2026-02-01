@@ -1,5 +1,9 @@
 const Document = require('../models/Document');
 const User = require('../models/User');
+const Appointment = require('../models/Appointment');
+const Treatment = require('../models/Treatment');
+const LabWork = require('../models/LabWork');
+const Prescription = require('../models/Prescription');
 const path = require('path');
 const fs = require('fs');
 
@@ -62,6 +66,24 @@ const toDto = (doc, req) => {
     };
 };
 
+const getDentistPatientIds = async (dentistId) => {
+    const [fromAppointments, fromTreatments, fromLabWork, fromPrescriptions] = await Promise.all([
+        Appointment.find({ dentist: dentistId }).distinct('patient'),
+        Treatment.find({ dentist: dentistId }).distinct('patient'),
+        LabWork.find({ dentist: dentistId }).distinct('patient'),
+        Prescription.find({ dentist: dentistId }).distinct('patient'),
+    ]);
+
+    const ids = new Set([
+        ...fromAppointments.map(String),
+        ...fromTreatments.map(String),
+        ...fromLabWork.map(String),
+        ...fromPrescriptions.map(String),
+    ]);
+
+    return Array.from(ids);
+};
+
 exports.getAllDocuments = async (req, res, next) => {
     try {
         const { category, search, patientId, parentId, isFolder, includeArchived } = req.query;
@@ -91,6 +113,26 @@ exports.getAllDocuments = async (req, res, next) => {
             }
         }
 
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            const accessFilter = {
+                $or: [
+                    { patient: { $in: allowedIds } },
+                    { patient: null, uploadedBy: req.user._id },
+                    { patient: { $exists: false }, uploadedBy: req.user._id },
+                ],
+            };
+
+            if (!Array.isArray(query.$and)) query.$and = [];
+            query.$and.push(accessFilter);
+
+            if (Array.isArray(query.$or) && query.$or.length) {
+                const searchOr = query.$or;
+                delete query.$or;
+                query.$and.push({ $or: searchOr });
+            }
+        }
+
         const documents = await Document.find(query)
             .populate('patient', 'firstName lastName phone')
             .populate('uploadedBy', 'firstName lastName')
@@ -109,6 +151,21 @@ exports.createFolder = async (req, res, next) => {
         const safeTitle = String(title || '').trim();
         if (!safeTitle) {
             return res.status(400).json({ status: 'error', message: 'title is required' });
+        }
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            if (patientId) {
+                const allowedIds = await getDentistPatientIds(req.user._id);
+                if (!allowedIds.includes(String(patientId))) {
+                    return res.status(404).json({ status: 'error', message: 'Patient not found' });
+                }
+            }
+            if (treatmentId) {
+                const t = await Treatment.findOne({ _id: treatmentId, dentist: req.user._id }).select('_id');
+                if (!t) {
+                    return res.status(404).json({ status: 'error', message: 'Treatment not found' });
+                }
+            }
         }
 
         const uploaderId = await pickUploaderId(req, uploadedBy);
@@ -141,7 +198,17 @@ exports.createFolder = async (req, res, next) => {
 
 exports.updateDocument = async (req, res, next) => {
     try {
-        const doc = await Document.findById(req.params.id);
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            query.$or = [
+                { patient: { $in: allowedIds } },
+                { patient: null, uploadedBy: req.user._id },
+                { patient: { $exists: false }, uploadedBy: req.user._id },
+            ];
+        }
+
+        const doc = await Document.findOne(query);
         if (!doc) return res.status(404).json({ status: 'error', message: 'Not found' });
 
         const body = req.body || {};
@@ -169,7 +236,17 @@ exports.updateDocument = async (req, res, next) => {
 
 exports.getDocumentById = async (req, res, next) => {
     try {
-        const document = await Document.findById(req.params.id)
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            query.$or = [
+                { patient: { $in: allowedIds } },
+                { patient: null, uploadedBy: req.user._id },
+                { patient: { $exists: false }, uploadedBy: req.user._id },
+            ];
+        }
+
+        const document = await Document.findOne(query)
             .populate('patient', 'firstName lastName phone')
             .populate('uploadedBy', 'firstName lastName');
         if (!document) return res.status(404).json({ status: 'error', message: 'Not found' });
@@ -195,6 +272,21 @@ exports.uploadDocument = async (req, res, next) => {
             tags,
             uploadedBy,
         } = req.body;
+
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            if (patientId) {
+                const allowedIds = await getDentistPatientIds(req.user._id);
+                if (!allowedIds.includes(String(patientId))) {
+                    return res.status(404).json({ status: 'error', message: 'Patient not found' });
+                }
+            }
+            if (treatmentId) {
+                const t = await Treatment.findOne({ _id: treatmentId, dentist: req.user._id }).select('_id');
+                if (!t) {
+                    return res.status(404).json({ status: 'error', message: 'Treatment not found' });
+                }
+            }
+        }
 
         const uploaderId = await pickUploaderId(req, uploadedBy);
 
@@ -230,7 +322,17 @@ exports.uploadDocument = async (req, res, next) => {
 
 exports.deleteDocument = async (req, res, next) => {
     try {
-        const doc = await Document.findById(req.params.id);
+        const query = { _id: req.params.id };
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            query.$or = [
+                { patient: { $in: allowedIds } },
+                { patient: null, uploadedBy: req.user._id },
+                { patient: { $exists: false }, uploadedBy: req.user._id },
+            ];
+        }
+
+        const doc = await Document.findOne(query);
         if (!doc) return res.status(404).json({ status: 'error', message: 'Not found' });
 
         const idsToDelete = [doc._id];
@@ -264,6 +366,13 @@ exports.deleteDocument = async (req, res, next) => {
 
 exports.getPatientDocuments = async (req, res, next) => {
     try {
+        if (req.user?.role === 'dentist' && req.user?._id) {
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(req.params.patientId))) {
+                return res.status(404).json({ status: 'error', message: 'Patient not found' });
+            }
+        }
+
         const documents = await Document.find({ patient: req.params.patientId })
             .populate('patient', 'firstName lastName phone')
             .populate('uploadedBy', 'firstName lastName')

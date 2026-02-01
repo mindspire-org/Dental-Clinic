@@ -5,11 +5,9 @@ const labWorkController = require('../controllers/labWorkController');
 // const authorize = require('../middleware/role.middleware');
 
 const auth = require('../middleware/auth.middleware');
-const authorize = require('../middleware/role.middleware');
 
 // router.use(auth);
 router.use(auth);
-router.use(authorize('admin', 'dentist'));
 
 router.get('/summary', labWorkController.getLabWorkSummary);
 router.get('/', labWorkController.getAllLabWork);

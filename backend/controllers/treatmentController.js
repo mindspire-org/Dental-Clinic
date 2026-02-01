@@ -50,7 +50,7 @@ exports.getTreatmentById = async (req, res, next) => {
 exports.createTreatment = async (req, res, next) => {
     try {
         const payload = { ...req.body };
-        if (!payload.dentist && req.user?._id) {
+        if (!payload.dentist && req.user?.role === 'dentist' && req.user?._id) {
             payload.dentist = req.user._id;
         }
         const treatment = await Treatment.create(payload);

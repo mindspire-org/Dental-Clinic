@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useRole } from '@/contexts/RoleContext';
 
 const notifications = [
   { id: 1, title: 'New appointment request', desc: 'John Doe requested an appointment for tomorrow', time: '2 min ago', unread: true },
@@ -25,6 +26,18 @@ const notifications = [
 export function Header() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const { authRole, license, permissions } = useRole();
+
+  const canAccess = (moduleKey: string) => {
+    if (authRole === 'superadmin') return true;
+    if (Array.isArray(license?.enabledModules) && license.enabledModules.length && !license.enabledModules.includes(moduleKey)) {
+      return false;
+    }
+    if (Array.isArray(permissions) && !permissions.includes(moduleKey)) {
+      return false;
+    }
+    return true;
+  };
 
   const go = (path: string) => {
     navigate(path);
@@ -76,17 +89,25 @@ export function Header() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-popover">
-              <DropdownMenuItem onSelect={() => go('/patients/new')}>New Patient</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => go('/appointments?new=1')}>New Appointment</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => go('/treatments?new=1')}>New Treatment</DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  go('/billing/checkup');
-                  toast.info('Create invoices from completed appointments on the Billing page.');
-                }}
-              >
-                New Invoice
-              </DropdownMenuItem>
+              {canAccess('patients') && (
+                <DropdownMenuItem onSelect={() => go('/patients/new')}>New Patient</DropdownMenuItem>
+              )}
+              {canAccess('appointments') && (
+                <DropdownMenuItem onSelect={() => go('/appointments?new=1')}>New Appointment</DropdownMenuItem>
+              )}
+              {canAccess('treatments') && (
+                <DropdownMenuItem onSelect={() => go('/treatments?new=1')}>New Treatment</DropdownMenuItem>
+              )}
+              {canAccess('billing') && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    go('/billing/checkup');
+                    toast.info('Create invoices from completed appointments on the Billing page.');
+                  }}
+                >
+                  New Invoice
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -126,9 +147,29 @@ export function Header() {
                   key={notif.id}
                   className="flex flex-col items-start gap-1 p-3 cursor-pointer"
                   onSelect={() => {
-                    if (notif.id === 1) go('/appointments/waiting');
-                    else if (notif.id === 2) go('/lab-work');
-                    else if (notif.id === 3) go('/billing/payments');
+                    if (notif.id === 1) {
+                      if (!canAccess('appointments')) {
+                        toast.error('Access denied');
+                        return;
+                      }
+                      go('/appointments/waiting');
+                      return;
+                    }
+                    if (notif.id === 2) {
+                      if (!canAccess('lab-work')) {
+                        toast.error('Access denied');
+                        return;
+                      }
+                      go('/lab-work');
+                      return;
+                    }
+                    if (notif.id === 3) {
+                      if (!canAccess('billing')) {
+                        toast.error('Access denied');
+                        return;
+                      }
+                      go('/billing/payments');
+                    }
                   }}
                 >
                   <div className="flex items-center gap-2 w-full">

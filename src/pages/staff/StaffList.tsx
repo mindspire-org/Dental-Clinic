@@ -51,7 +51,7 @@ export default function StaffList() {
     });
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         if (!token) {
             setAuthMissing(true);
             setLoading(false);
