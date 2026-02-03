@@ -8,10 +8,12 @@
     "setup": "npm install && npm --prefix backend install",
     "clean:release": "node -e \"const fs=require('fs'); try{fs.rmSync('release',{recursive:true,force:true,maxRetries:10,retryDelay:500});}catch(e){console.warn('WARN: could not delete release folder (locked). Continuing.');}\"",
     "win:unlock-release": "cmd /c \"taskkill /F /IM \\\"Dental Care.exe\\\" /T >NUL 2>&1 & taskkill /F /IM electron.exe /T >NUL 2>&1 & rmdir /S /Q release >NUL 2>&1 & exit /B 0\"",
-    "dev": "concurrently -n client,server -c blue,green \"npm run dev:client\" \"npm run dev:server\"",
+    "postinstall": "npm --prefix backend install",
+    "dev": "concurrently -n client,server,electron -c blue,green,magenta \"npm run dev:client\" \"npm run dev:server\" \"npm run dev:electron\"",
     "dev:client": "vite",
     "dev:server": "npm --prefix backend run dev",
-    "electron:dev": "concurrently -n web,electron -c blue,magenta \"npm run dev\" \"wait-on http://localhost:8080 && electron .\"",
+    "dev:electron": "wait-on http://localhost:8080 && electron .",
+    "electron:dev": "npm run dev",
     "electron:build": "npm run clean:release && npm --prefix backend install --omit=dev && npm run build && electron-builder",
     "dist:win": "npm run win:unlock-release && npm run electron:build -- --win",
     "dist:mac": "npm run electron:build -- --mac",
@@ -116,13 +118,34 @@
     "extraResources": [
       {
         "from": "backend",
-        "to": "backend"
+        "to": "backend",
+        "filter": [
+          "**/*",
+          ".env"
+        ]
       }
     ],
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.healthcare-fitness"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Dental Care"
     }
   }
 }

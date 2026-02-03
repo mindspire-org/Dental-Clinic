@@ -280,7 +280,7 @@ export function AppSidebar() {
       return item.roles.includes(role);
     })
     .filter((item) => {
-      if (role === 'superadmin') return true;
+      if (role === 'superadmin') return item.roles.includes('superadmin');
       if (!license?.isActive) return item.title === 'Logout';
       const key = moduleKeyByTitle[item.title];
       if (key && Array.isArray(license?.enabledModules) && !license.enabledModules.includes(key)) return false;
@@ -338,7 +338,7 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <Link to="/" className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow overflow-hidden">
-            <img src="/Dental.jpg" alt="Dental Care Logo" className="w-full h-full object-contain p-1" />
+            <img src="./dental-logo.png" alt="Dental Care Logo" className="w-full h-full object-contain p-1" />
           </div>
           {!collapsed && (
             <div className="animate-fade-in">

@@ -116,12 +116,17 @@ const startBackendIfPackaged = async () => {
 };
 
 const createWindow = async () => {
+  const iconPath = isDev
+    ? path.join(__dirname, '..', 'public', 'dental-logo.png')
+    : path.join(__dirname, '..', 'dist', 'dental-logo.png');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
     show: false,
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
