@@ -52,7 +52,7 @@ exports.updateProcedureBill = async (req, res, next) => {
             }
         }
 
-        const { procedureCost, notes, dueDate, paidAmount } = req.body || {};
+        const { procedureCost, notes, dueDate } = req.body || {};
         if (procedureCost !== undefined) {
             const cost = Number(procedureCost);
             if (Array.isArray(invoice.items) && invoice.items.length) {
@@ -67,21 +67,8 @@ exports.updateProcedureBill = async (req, res, next) => {
         }
         if (notes !== undefined) invoice.notes = notes;
         if (dueDate !== undefined) invoice.dueDate = dueDate;
-        if (paidAmount !== undefined) invoice.paidAmount = Number(paidAmount);
 
         await invoice.save();
-
-        if (ids.length) {
-            const totalPaid = Number(invoice.paidAmount || 0);
-            const advance = Number(invoice.advancePayment || 0);
-            const advanceShare = advance / ids.length;
-            const extraPaid = Math.max(0, totalPaid - advance);
-            const extraShare = extraPaid / ids.length;
-            await Treatment.updateMany(
-                { _id: { $in: ids } },
-                { $set: { advancePaid: advanceShare, paidAmount: extraShare } }
-            );
-        }
 
         const populated = await Billing.findById(invoice._id)
             .populate('patient', 'firstName lastName email phone')
@@ -197,11 +184,9 @@ exports.createProcedureBill = async (req, res, next) => {
             treatmentIds, // Array of treatment IDs
             treatmentId, // single treatment id (frontend)
             procedureCost,
-            advancePayment,
-            advancePaymentPercentage = 25,
             notes,
             dueDate,
-            paidAmount = 0
+            advancePaymentPercentage = 25
         } = req.body;
 
         const finalTreatmentIds = Array.isArray(treatmentIds) && treatmentIds.length
@@ -266,22 +251,7 @@ exports.createProcedureBill = async (req, res, next) => {
         // Calculate total
         const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
-        // Validate advance payment (minimum 25%)
         const minAdvance = subtotal * (advancePaymentPercentage / 100);
-        const actualAdvance = advancePayment || paidAmount || 0;
-
-        if (actualAdvance > 0 && actualAdvance < minAdvance) {
-            return res.status(400).json({
-                status: 'error',
-                message: `Minimum advance payment of ${advancePaymentPercentage}% (${minAdvance.toFixed(2)}) is required`,
-                data: {
-                    subtotal,
-                    minAdvance,
-                    providedAdvance: actualAdvance,
-                    requiredPercentage: advancePaymentPercentage
-                }
-            });
-        }
 
         // Create invoice
         const invoiceData = {
@@ -292,10 +262,10 @@ exports.createProcedureBill = async (req, res, next) => {
             items,
             dueDate: dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
             notes: notes || `Procedure fees for ${treatments.length} treatment(s)`,
-            requiresAdvance: true,
-            advancePayment: actualAdvance,
+            requiresAdvance: false,
+            advancePayment: 0,
             advancePaymentPercentage,
-            paidAmount: actualAdvance,
+            paidAmount: 0,
             billingContext: {
                 treatmentIds: treatments.map(t => t._id),
                 procedures: treatments.map(t => ({
@@ -312,10 +282,6 @@ exports.createProcedureBill = async (req, res, next) => {
         // Update treatments with invoice reference and advance payment
         await Promise.all(treatments.map(async (treatment) => {
             treatment.invoice = invoice._id;
-            if (actualAdvance > 0) {
-                const treatmentShare = actualAdvance / treatments.length;
-                treatment.advancePaid = treatmentShare;
-            }
             await treatment.save();
         }));
 
@@ -329,9 +295,9 @@ exports.createProcedureBill = async (req, res, next) => {
                 invoice: populated,
                 advanceInfo: {
                     required: minAdvance,
-                    paid: actualAdvance,
+                    paid: 0,
                     percentage: advancePaymentPercentage,
-                    balance: subtotal - actualAdvance
+                    balance: subtotal
                 }
             }
         });

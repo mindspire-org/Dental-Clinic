@@ -130,6 +130,14 @@ export const treatmentsApi = {
         method: 'POST',
         body: JSON.stringify(data),
     }),
+    addSession: (id: string, data?: any) => apiRequest(`/treatments/${id}/sessions`, {
+        method: 'POST',
+        body: JSON.stringify(data || {}),
+    }),
+    updateSession: (id: string, sessionId: string, data?: any) => apiRequest(`/treatments/${id}/sessions/${sessionId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data || {}),
+    }),
     update: (id: string, data: any) => apiRequest(`/treatments/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -196,6 +204,26 @@ export const labWorkApi = {
         body: JSON.stringify(data),
     }),
     delete: (id: string) => apiRequest(`/lab-work/${id}`, {
+        method: 'DELETE',
+    }),
+};
+
+// Lab Test Templates API
+export const labTestTemplatesApi = {
+    getAll: (params?: any) => {
+        const query = new URLSearchParams(params).toString();
+        return apiRequest(`/lab-test-templates${query ? `?${query}` : ''}`);
+    },
+    getById: (id: string) => apiRequest(`/lab-test-templates/${id}`),
+    create: (data: any) => apiRequest('/lab-test-templates', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    }),
+    update: (id: string, data: any) => apiRequest(`/lab-test-templates/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+    }),
+    delete: (id: string) => apiRequest(`/lab-test-templates/${id}`, {
         method: 'DELETE',
     }),
 };

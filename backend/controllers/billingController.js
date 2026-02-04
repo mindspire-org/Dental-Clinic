@@ -221,6 +221,8 @@ exports.recordPayment = async (req, res, next) => {
 exports.getAllPayments = async (req, res, next) => {
     try {
         const query = {};
+        const { patientId } = req.query || {};
+        if (patientId) query.patient = patientId;
         if (req.user?.role === 'dentist' && req.user?._id) {
             const ids = await getDentistInvoiceIds(req.user._id);
             query.invoice = { $in: ids };

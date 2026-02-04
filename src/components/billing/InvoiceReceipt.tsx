@@ -157,7 +157,7 @@ export default function InvoiceReceipt({ receipt, onClose, onPrint, autoPrint }:
 
     return (
         <Dialog open={true} onOpenChange={onClose}>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-full print:max-h-full">
+            <DialogContent showClose={false} className="max-w-4xl max-h-[90vh] overflow-y-auto print:max-w-full print:max-h-full">
                 <div className="print:p-8">
                     {/* Header - No Print */}
                     <div className="flex items-center justify-between mb-6 print:hidden">

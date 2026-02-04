@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { Plus, Edit, Trash2, Clock } from 'lucide-react';
 import { ColumnDef } from '@tanstack/react-table';
-import { dentistsApi, labWorkApi, patientsApi } from '@/lib/api';
+import { dentistsApi, labTestTemplatesApi, labWorkApi, patientsApi } from '@/lib/api';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 
@@ -49,6 +49,16 @@ interface OptionItem {
     lastName?: string;
 }
 
+type LabTestTemplate = {
+    _id: string;
+    name: string;
+    labName?: string;
+    workType: string;
+    description?: string;
+    defaultCost?: number;
+    isActive?: boolean;
+};
+
 type LabWorkRow = {
     _id: string;
     patientName: string;
@@ -74,9 +84,21 @@ export default function LabWorkList() {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
     const [selectedLabWork, setSelectedLabWork] = useState<LabWork | null>(null);
+    const [templates, setTemplates] = useState<LabTestTemplate[]>([]);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [templateSaving, setTemplateSaving] = useState(false);
+    const [templateForm, setTemplateForm] = useState({
+        name: '',
+        labName: '',
+        workType: 'other',
+        description: '',
+        defaultCost: '',
+        isActive: true,
+    });
     const [formData, setFormData] = useState({
         patientId: '',
         dentistId: 'auto',
+        templateId: 'none',
         labName: '',
         workType: '',
         description: '',
@@ -107,21 +129,25 @@ export default function LabWorkList() {
                     labWorkApi.getAll({ limit: 200 }),
                     patientsApi.getAll({ limit: 200 }),
                     dentistsApi.getAll({ isActive: true }),
+                    labTestTemplatesApi.getAll({ isActive: true }),
                 ]);
 
                 if (!mounted) return;
                 const lwRes = results[0].status === 'fulfilled' ? results[0].value : null;
                 const patientsRes = results[1].status === 'fulfilled' ? results[1].value : null;
                 const dentistsRes = results[2].status === 'fulfilled' ? results[2].value : null;
+                const templatesRes = results[3].status === 'fulfilled' ? results[3].value : null;
 
                 const lwList = (((lwRes as any)?.data?.labWorks || (lwRes as any)?.data?.labWork || []) as LabWork[]);
                 setLabWorks(lwList);
                 setPatients(((patientsRes as any)?.data?.patients || []) as OptionItem[]);
                 setDentists(((dentistsRes as any)?.data?.dentists || []) as OptionItem[]);
+                setTemplates((((templatesRes as any)?.data?.templates || []) as LabTestTemplate[]));
 
                 if (results[0].status === 'rejected') toast.error((results[0] as any).reason?.message || 'Failed to load lab work');
                 if (results[1].status === 'rejected') toast.error((results[1] as any).reason?.message || 'Failed to load patients');
                 if (results[2].status === 'rejected') toast.error((results[2] as any).reason?.message || 'Failed to load dentists');
+                if (results[3].status === 'rejected') toast.error((results[3] as any).reason?.message || 'Failed to load lab templates');
             } catch (e: any) {
                 if (!mounted) return;
                 console.error('Error fetching lab works:', e);
@@ -129,6 +155,7 @@ export default function LabWorkList() {
                 setLabWorks([]);
                 setPatients([]);
                 setDentists([]);
+                setTemplates([]);
             } finally {
                 if (!mounted) return;
                 setLoading(false);
@@ -138,6 +165,60 @@ export default function LabWorkList() {
         load();
         return () => { mounted = false; };
     }, []);
+
+    const fetchTemplates = async () => {
+        try {
+            const res = await labTestTemplatesApi.getAll({ isActive: true });
+            setTemplates(res?.data?.templates || []);
+        } catch (e: any) {
+            console.error('Failed to load templates', e);
+            setTemplates([]);
+        }
+    };
+
+    const openNewTemplate = () => {
+        setTemplateForm({
+            name: '',
+            labName: formData.labName || '',
+            workType: (formData.workType || 'other') as any,
+            description: formData.description || '',
+            defaultCost: formData.cost || '',
+            isActive: true,
+        });
+        setShowTemplateModal(true);
+    };
+
+    const handleSaveTemplate = async () => {
+        const name = String(templateForm.name || '').trim();
+        if (!name) {
+            toast.error('Template name is required');
+            return;
+        }
+        if (!templateForm.workType) {
+            toast.error('Work type is required');
+            return;
+        }
+
+        try {
+            setTemplateSaving(true);
+            await labTestTemplatesApi.create({
+                name,
+                labName: templateForm.labName,
+                workType: templateForm.workType,
+                description: templateForm.description,
+                defaultCost: templateForm.defaultCost !== '' ? Number(templateForm.defaultCost) : 0,
+                isActive: templateForm.isActive,
+            });
+            toast.success('Template saved');
+            setShowTemplateModal(false);
+            await fetchTemplates();
+        } catch (e: any) {
+            console.error('Failed to save template', e);
+            toast.error(e?.message || 'Failed to save template');
+        } finally {
+            setTemplateSaving(false);
+        }
+    };
 
     const fetchLabWorks = async () => {
         const token = sessionStorage.getItem('token');
@@ -156,6 +237,7 @@ export default function LabWorkList() {
         setFormData({
             patientId: '',
             dentistId: 'auto',
+            templateId: 'none',
             labName: '',
             workType: '',
             description: '',
@@ -176,6 +258,7 @@ export default function LabWorkList() {
         setFormData({
             patientId: labWork.patient?._id || '',
             dentistId: labWork.dentist?._id || 'auto',
+            templateId: 'none',
             labName: labWork.labName || '',
             workType: labWork.workType || '',
             description: labWork.description || '',
@@ -473,6 +556,47 @@ export default function LabWorkList() {
                     size="xl"
                 >
                     <div className="grid gap-4">
+                        {!editId ? (
+                            <div className="grid gap-2">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Label>Lab Test Template (optional)</Label>
+                                    <Button type="button" variant="outline" size="sm" onClick={openNewTemplate}>
+                                        New Template
+                                    </Button>
+                                </div>
+                                <Select
+                                    value={formData.templateId}
+                                    onValueChange={(value) => {
+                                        if (value === 'none') {
+                                            setFormData((prev) => ({ ...prev, templateId: 'none' }));
+                                            return;
+                                        }
+                                        const tpl = (templates || []).find((t) => t._id === value);
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            templateId: value,
+                                            labName: tpl?.labName || prev.labName,
+                                            workType: tpl?.workType || prev.workType,
+                                            description: tpl?.description || prev.description,
+                                            cost: typeof tpl?.defaultCost === 'number' ? String(tpl.defaultCost) : prev.cost,
+                                        }));
+                                    }}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select template" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">No template</SelectItem>
+                                        {templates.map((t) => (
+                                            <SelectItem key={t._id} value={t._id}>
+                                                {t.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ) : null}
+
                         <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
                                 <Label>Patient *</Label>
@@ -629,6 +753,78 @@ export default function LabWorkList() {
                                 value={formData.notes}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 placeholder="Additional notes..."
+                                rows={3}
+                            />
+                        </div>
+                    </div>
+                </FormModal>
+
+                <FormModal
+                    open={showTemplateModal}
+                    onOpenChange={setShowTemplateModal}
+                    title="New Lab Test Template"
+                    description="Create a template once, then assign it to any patient"
+                    onSubmit={handleSaveTemplate}
+                    isLoading={templateSaving}
+                    size="lg"
+                >
+                    <div className="grid gap-4">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label>Template Name *</Label>
+                                <Input
+                                    value={templateForm.name}
+                                    onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                                    placeholder="e.g., Veneer standard"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Lab Name</Label>
+                                <Input
+                                    value={templateForm.labName}
+                                    onChange={(e) => setTemplateForm({ ...templateForm, labName: e.target.value })}
+                                    placeholder="e.g., Smile Lab"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                                <Label>Work Type *</Label>
+                                <Select value={templateForm.workType} onValueChange={(v) => setTemplateForm({ ...templateForm, workType: v })}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="crown">Crown</SelectItem>
+                                        <SelectItem value="bridge">Bridge</SelectItem>
+                                        <SelectItem value="denture">Denture</SelectItem>
+                                        <SelectItem value="implant">Implant</SelectItem>
+                                        <SelectItem value="veneer">Veneer</SelectItem>
+                                        <SelectItem value="retainer">Retainer</SelectItem>
+                                        <SelectItem value="mouthguard">Mouthguard</SelectItem>
+                                        <SelectItem value="other">Other</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Default Cost</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={templateForm.defaultCost}
+                                    onChange={(e) => setTemplateForm({ ...templateForm, defaultCost: e.target.value })}
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Description</Label>
+                            <Textarea
+                                value={templateForm.description}
+                                onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                                placeholder="Template description..."
                                 rows={3}
                             />
                         </div>

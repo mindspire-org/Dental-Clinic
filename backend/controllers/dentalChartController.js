@@ -88,11 +88,16 @@ exports.getPatientChart = async (req, res, next) => {
         if (!chart) {
             const teeth = fdiAdultTeeth();
             const updaterId = await getUpdaterId(req);
-            chart = await DentalChart.create({
+            const created = await DentalChart.create({
                 patient: patientId,
                 teeth,
                 updatedBy: updaterId,
             });
+
+            chart = await DentalChart.findById(created._id)
+                .populate('teeth.treatments.treatment', 'name category')
+                .populate('teeth.treatments.dentist', 'firstName lastName')
+                .populate('updatedBy', 'firstName lastName');
         }
 
         res.status(200).json({
@@ -150,9 +155,14 @@ exports.updateChart = async (req, res, next) => {
         chart.lastUpdated = new Date();
         await chart.save();
 
+        const populated = await DentalChart.findById(chart._id)
+            .populate('teeth.treatments.treatment', 'name category')
+            .populate('teeth.treatments.dentist', 'firstName lastName')
+            .populate('updatedBy', 'firstName lastName');
+
         res.status(200).json({
             status: 'success',
-            data: { chart }
+            data: { chart: populated }
         });
     } catch (error) {
         next(error);
@@ -203,9 +213,14 @@ exports.addToothTreatment = async (req, res, next) => {
         chart.lastUpdated = new Date();
         await chart.save();
 
+        const populated = await DentalChart.findById(chart._id)
+            .populate('teeth.treatments.treatment', 'name category')
+            .populate('teeth.treatments.dentist', 'firstName lastName')
+            .populate('updatedBy', 'firstName lastName');
+
         res.status(201).json({
             status: 'success',
-            data: { chart }
+            data: { chart: populated }
         });
     } catch (error) {
         next(error);
@@ -259,9 +274,14 @@ exports.updateToothTreatment = async (req, res, next) => {
         chart.lastUpdated = new Date();
         await chart.save();
 
+        const populated = await DentalChart.findById(chart._id)
+            .populate('teeth.treatments.treatment', 'name category')
+            .populate('teeth.treatments.dentist', 'firstName lastName')
+            .populate('updatedBy', 'firstName lastName');
+
         res.status(200).json({
             status: 'success',
-            data: { chart }
+            data: { chart: populated }
         });
     } catch (error) {
         next(error);

@@ -73,7 +73,6 @@ export default function ProcedureBilling() {
         procedureCost: '',
         notes: '',
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        paidAmount: '',
     });
 
     useEffect(() => {
@@ -116,7 +115,6 @@ export default function ProcedureBilling() {
             procedureCost: String(defaultCost),
             notes: `${procedureName}${teethInfo} - ${new Date(treatment.startDate).toLocaleDateString()}`,
             dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-            paidAmount: '',
         });
         setShowModal(true);
     };
@@ -132,7 +130,6 @@ export default function ProcedureBilling() {
                 procedureCost: String(bill?.items?.[0]?.unitPrice ?? bill?.total ?? ''),
                 notes: String(bill?.notes || bill?.items?.[0]?.description || ''),
                 dueDate: bill?.dueDate ? new Date(bill.dueDate).toISOString().slice(0, 10) : '',
-                paidAmount: String(bill?.paidAmount || ''),
             });
             setShowModal(true);
         } catch (error) {
@@ -168,7 +165,6 @@ export default function ProcedureBilling() {
                     procedureCost: Number(formData.procedureCost),
                     notes: formData.notes,
                     dueDate: formData.dueDate,
-                    paidAmount: formData.paidAmount ? Number(formData.paidAmount) : undefined,
                 });
             } else if (selectedTreatment) {
                 // Create new invoice
@@ -177,7 +173,6 @@ export default function ProcedureBilling() {
                     procedureCost: Number(formData.procedureCost),
                     notes: formData.notes,
                     dueDate: formData.dueDate,
-                    paidAmount: formData.paidAmount ? Number(formData.paidAmount) : 0,
                 });
             }
 
@@ -527,50 +522,9 @@ export default function ProcedureBilling() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Paid Amount</Label>
-                            <Input
-                                type="number"
-                                value={formData.paidAmount}
-                                onChange={(e) => setFormData({ ...formData, paidAmount: e.target.value })}
-                                placeholder="0.00"
-                            />
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                        const base = Number(formData.procedureCost || 0);
-                                        const next = base > 0 ? Math.round(base * 0.25) : 0;
-                                        setFormData({ ...formData, paidAmount: String(next) });
-                                    }}
-                                >
-                                    25%
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                        const base = Number(formData.procedureCost || 0);
-                                        const next = base > 0 ? Math.round(base * 0.5) : 0;
-                                        setFormData({ ...formData, paidAmount: String(next) });
-                                    }}
-                                >
-                                    50%
-                                </Button>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                        const base = Number(formData.procedureCost || 0);
-                                        const next = base > 0 ? Math.round(base) : 0;
-                                        setFormData({ ...formData, paidAmount: String(next) });
-                                    }}
-                                >
-                                    100%
-                                </Button>
+                            <Label>Payment</Label>
+                            <div className="text-sm text-muted-foreground">
+                                Collect payment from the Payments page.
                             </div>
                         </div>
 
@@ -602,22 +556,6 @@ export default function ProcedureBilling() {
                                         {formatCurrency(Number(formData.procedureCost))}
                                     </span>
                                 </div>
-                                {formData.paidAmount && (
-                                    <>
-                                        <div className="flex justify-between items-center mt-2 text-sm">
-                                            <span className="text-muted-foreground">Paid:</span>
-                                            <span className="font-medium text-green-600">
-                                                {formatCurrency(Number(formData.paidAmount))}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center mt-1 pt-2 border-t">
-                                            <span className="font-semibold">Balance:</span>
-                                            <span className="text-lg font-bold text-destructive">
-                                                {formatCurrency(Number(formData.procedureCost) - Number(formData.paidAmount))}
-                                            </span>
-                                        </div>
-                                    </>
-                                )}
                             </div>
                         )}
                     </div>

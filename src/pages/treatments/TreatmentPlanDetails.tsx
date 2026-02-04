@@ -4,6 +4,10 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { FormModal } from '@/components/shared/FormModal';
 import { treatmentsApi } from '@/lib/api';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -72,6 +76,10 @@ function TreatmentPlanDetailsContent() {
 
   const [loading, setLoading] = useState(true);
   const [treatment, setTreatment] = useState<ApiTreatment | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('');
+  const [sessionForm, setSessionForm] = useState({ date: '', duration: '', notes: '' });
 
   useEffect(() => {
     let isMounted = true;
@@ -103,6 +111,64 @@ function TreatmentPlanDetailsContent() {
       isMounted = false;
     };
   }, [id]);
+
+  const reload = async () => {
+    if (!id) return;
+    const res = await treatmentsApi.getById(id);
+    setTreatment((res?.data?.treatment || null) as ApiTreatment | null);
+  };
+
+  const handleCompleteSession = async () => {
+    if (!id) return;
+    try {
+      setSaving(true);
+      await treatmentsApi.addSession(id, { date: new Date().toISOString() });
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkCompleted = async () => {
+    if (!id) return;
+    try {
+      setSaving(true);
+      await treatmentsApi.update(id, { status: 'completed', completionDate: new Date().toISOString(), progressPercent: 100 });
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openEditSession = (sessionId: string) => {
+    const s = (treatment?.sessions || []).find((x: any) => String((x as any)?._id || '') === String(sessionId));
+    if (!s) return;
+    const date = s?.date ? new Date(s.date).toISOString().slice(0, 10) : '';
+    setSelectedSessionId(sessionId);
+    setSessionForm({
+      date,
+      duration: s?.duration !== undefined && s?.duration !== null ? String(s.duration) : '',
+      notes: String(s?.notes || ''),
+    });
+    setShowSessionModal(true);
+  };
+
+  const submitSessionUpdate = async () => {
+    if (!id || !selectedSessionId) return;
+    try {
+      setSaving(true);
+      await treatmentsApi.updateSession(id, selectedSessionId, {
+        date: sessionForm.date ? new Date(sessionForm.date).toISOString() : undefined,
+        duration: sessionForm.duration !== '' ? Number(sessionForm.duration) : null,
+        notes: sessionForm.notes !== '' ? sessionForm.notes : null,
+      });
+      setShowSessionModal(false);
+      setSelectedSessionId('');
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const patientName = useMemo(() => {
     const p = treatment?.patient;
@@ -179,7 +245,23 @@ function TreatmentPlanDetailsContent() {
           <h1 className="text-2xl font-bold text-foreground mt-2">Treatment Plan Details</h1>
           <p className="text-muted-foreground">View complete treatment plan information</p>
         </div>
-        <Badge className={cn('font-medium', status.color)}>{status.label}</Badge>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleCompleteSession}
+            disabled={saving || (treatment.status === 'completed')}
+          >
+            Complete Session
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleMarkCompleted}
+            disabled={saving || (treatment.status === 'completed')}
+          >
+            Mark Completed
+          </Button>
+          <Badge className={cn('font-medium', status.color)}>{status.label}</Badge>
+        </div>
       </div>
 
       {/* Progress */}
@@ -387,6 +469,69 @@ function TreatmentPlanDetailsContent() {
           </Card>
         </div>
       </div>
+
+      <Card className="shadow-card">
+        <CardHeader className="pb-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CalendarDays className="w-4 h-4" />
+            <span>Sessions</span>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(treatment.sessions || []).length === 0 ? (
+            <div className="text-sm text-muted-foreground">No sessions recorded yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {(treatment.sessions || []).map((s: any, idx: number) => {
+                const sid = String(s?._id || idx);
+                const dateLabel = s?.date ? new Date(s.date).toLocaleDateString() : '-';
+                const durationLabel = s?.duration ? `${s.duration} min` : '-';
+                return (
+                  <div key={sid} className="flex items-start justify-between gap-4 p-3 rounded-lg border bg-muted/20">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-foreground">Session {idx + 1}</div>
+                      <div className="text-xs text-muted-foreground">Date: {dateLabel} • Duration: {durationLabel}</div>
+                      {s?.notes ? <div className="text-sm text-foreground whitespace-pre-wrap">{String(s.notes)}</div> : null}
+                    </div>
+                    {s?._id ? (
+                      <Button variant="outline" size="sm" onClick={() => openEditSession(String(s._id))} disabled={saving}>
+                        Edit
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <FormModal
+        open={showSessionModal}
+        onOpenChange={(open) => {
+          setShowSessionModal(open);
+          if (!open) setSelectedSessionId('');
+        }}
+        title="Update Session"
+        onSubmit={submitSessionUpdate}
+        submitLabel="Update"
+        isLoading={saving}
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Date</Label>
+            <Input type="date" value={sessionForm.date} onChange={(e) => setSessionForm({ ...sessionForm, date: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label>Duration (minutes)</Label>
+            <Input type="number" value={sessionForm.duration} onChange={(e) => setSessionForm({ ...sessionForm, duration: e.target.value })} />
+          </div>
+          <div className="space-y-2 md:col-span-2">
+            <Label>Notes</Label>
+            <Textarea value={sessionForm.notes} onChange={(e) => setSessionForm({ ...sessionForm, notes: e.target.value })} rows={4} />
+          </div>
+        </div>
+      </FormModal>
     </div>
   );
 }

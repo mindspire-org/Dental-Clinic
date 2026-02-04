@@ -14,6 +14,8 @@ if (process.env.NODE_ENV !== 'development') {
 router.get('/', treatmentController.getAllTreatments);
 router.get('/patient/:patientId', treatmentController.getPatientTreatments);
 router.get('/:id', treatmentController.getTreatmentById);
+router.post('/:id/sessions', treatmentController.addTreatmentSession);
+router.put('/:id/sessions/:sessionId', treatmentController.updateTreatmentSession);
 router.post('/', treatmentController.createTreatment);
 router.put('/:id', treatmentController.updateTreatment);
 router.delete('/:id', treatmentController.deleteTreatment);

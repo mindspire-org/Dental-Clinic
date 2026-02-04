@@ -275,6 +275,107 @@ exports.getRecentActivities = async (req, res, next) => {
             };
         });
 
+        if (mapped.length === 0) {
+            const dentistScope = req.user?.role === 'dentist' && req.user?._id ? req.user._id : null;
+
+            const buildDentistInvoiceIds = async () => {
+                if (!dentistScope) return null;
+                const LabWork = require('../models/LabWork');
+                const Prescription = require('../models/Prescription');
+
+                const [appointmentIds, treatmentIds, labWorkIds, prescriptionIds] = await Promise.all([
+                    Appointment.find({ dentist: dentistScope }).distinct('_id'),
+                    Treatment.find({ dentist: dentistScope }).distinct('_id'),
+                    LabWork.find({ dentist: dentistScope }).distinct('_id'),
+                    Prescription.find({ dentist: dentistScope }).distinct('_id'),
+                ]);
+
+                const bills = await Billing.find({
+                    $or: [
+                        { appointment: { $in: appointmentIds } },
+                        { treatment: { $in: treatmentIds } },
+                        { labWork: { $in: labWorkIds } },
+                        { prescription: { $in: prescriptionIds } },
+                    ],
+                }).distinct('_id');
+                return bills;
+            };
+
+            const dentistInvoiceIds = await buildDentistInvoiceIds();
+
+            const [payments, appts, treatments, patients] = await Promise.all([
+                Payment.find(dentistInvoiceIds ? { invoice: { $in: dentistInvoiceIds } } : {})
+                    .populate('patient', 'firstName lastName')
+                    .sort('-createdAt')
+                    .limit(10),
+                Appointment.find(dentistScope ? { dentist: dentistScope } : {})
+                    .populate('patient', 'firstName lastName')
+                    .populate('dentist', 'firstName lastName')
+                    .sort('-createdAt')
+                    .limit(10),
+                Treatment.find(dentistScope ? { dentist: dentistScope } : {})
+                    .populate('patient', 'firstName lastName')
+                    .populate('dentist', 'firstName lastName')
+                    .populate('procedure', 'name')
+                    .sort('-createdAt')
+                    .limit(10),
+                Patient.find({ isActive: true }).sort('-createdAt').limit(10),
+            ]);
+
+            const fallback = [];
+
+            payments.forEach((p) => {
+                const name = p.patient ? `${p.patient.firstName || ''} ${p.patient.lastName || ''}`.trim() : 'Patient';
+                fallback.push({
+                    _id: `pay_${p._id}`,
+                    action: 'PAYMENT received',
+                    description: `${name} paid ${Number(p.amount || 0)}`,
+                    timestamp: p.paymentDate || p.createdAt,
+                    type: 'PAYMENT',
+                });
+            });
+
+            appts.forEach((a) => {
+                const name = a.patient ? `${a.patient.firstName || ''} ${a.patient.lastName || ''}`.trim() : 'Patient';
+                fallback.push({
+                    _id: `appt_${a._id}`,
+                    action: 'APPOINTMENT updated',
+                    description: `${name} appointment ${String(a.status || '').toLowerCase()}`,
+                    timestamp: a.updatedAt || a.createdAt,
+                    type: 'UPDATE',
+                });
+            });
+
+            treatments.forEach((t) => {
+                const name = t.patient ? `${t.patient.firstName || ''} ${t.patient.lastName || ''}`.trim() : 'Patient';
+                const proc = t.procedure?.name || t.treatmentType || 'Treatment';
+                fallback.push({
+                    _id: `tr_${t._id}`,
+                    action: 'TREATMENT updated',
+                    description: `${name} - ${proc} (${String(t.status || '').toLowerCase()})`,
+                    timestamp: t.updatedAt || t.createdAt,
+                    type: 'UPDATE',
+                });
+            });
+
+            patients.forEach((p) => {
+                fallback.push({
+                    _id: `pt_${p._id}`,
+                    action: 'PATIENT registered',
+                    description: `${p.firstName || ''} ${p.lastName || ''}`.trim(),
+                    timestamp: p.createdAt,
+                    type: 'CREATE',
+                });
+            });
+
+            fallback.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return res.status(200).json({
+                status: 'success',
+                data: { activities: fallback.slice(0, 10) }
+            });
+        }
+
         res.status(200).json({
             status: 'success',
             data: { activities: mapped }

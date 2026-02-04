@@ -163,8 +163,12 @@ exports.searchPatients = async (req, res, next) => {
 exports.getPatientAppointments = async (req, res, next) => {
     try {
         const query = { patient: req.params.id };
+
         if (req.user?.role === 'dentist' && req.user?._id) {
-            query.dentist = req.user._id;
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(req.params.id))) {
+                return res.status(404).json({ status: 'error', message: 'Patient not found' });
+            }
         }
 
         const appointments = await Appointment.find(query)
@@ -183,8 +187,12 @@ exports.getPatientAppointments = async (req, res, next) => {
 exports.getPatientTreatments = async (req, res, next) => {
     try {
         const query = { patient: req.params.id };
+
         if (req.user?.role === 'dentist' && req.user?._id) {
-            query.dentist = req.user._id;
+            const allowedIds = await getDentistPatientIds(req.user._id);
+            if (!allowedIds.includes(String(req.params.id))) {
+                return res.status(404).json({ status: 'error', message: 'Patient not found' });
+            }
         }
 
         const treatments = await Treatment.find(query)

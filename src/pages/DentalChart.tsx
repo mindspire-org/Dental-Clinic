@@ -213,6 +213,8 @@ function DentalChartContent() {
   const [selectedToothNumber, setSelectedToothNumber] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const [showHistory, setShowHistory] = useState(false);
+  const [patientTreatments, setPatientTreatments] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     const loadPatients = async () => {
@@ -261,6 +263,23 @@ function DentalChartContent() {
 
     loadChart();
   }, [patientId]);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!showHistory || !patientId) return;
+      try {
+        setHistoryLoading(true);
+        const res = await patientsApi.getTreatments(patientId);
+        setPatientTreatments(res?.data?.treatments || []);
+      } catch (e) {
+        console.error('Failed to load patient treatments', e);
+        setPatientTreatments([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+    loadHistory();
+  }, [showHistory, patientId]);
 
   const upperTeeth = useMemo<Tooth[]>(() => {
     return upperToothDefs.map((t) => ({
@@ -359,6 +378,19 @@ function DentalChartContent() {
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [chart]);
 
+  const treatmentHistoryItems = useMemo(() => {
+    if (treatments.length) return treatments;
+    const items: Array<{ toothNumber: number; date: string; title: string; status: string; dentist: string }> = [];
+    (patientTreatments || []).forEach((t: any) => {
+      const toothNumber = t?.teeth?.length ? Number(t.teeth[0]) : 0;
+      const dentist = t?.dentist ? `${t.dentist.firstName || ''} ${t.dentist.lastName || ''}`.trim() : '';
+      const title = t?.procedure?.name || t?.description || t?.treatmentType || 'Treatment';
+      const date = t?.startDate || t?.createdAt;
+      items.push({ toothNumber: Number.isFinite(toothNumber) ? toothNumber : 0, date, title, status: t?.status || 'planned', dentist });
+    });
+    return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [treatments, patientTreatments]);
+
   const summary = useMemo(() => {
     const all = [...upperTeeth, ...lowerTeeth];
     const healthy = all.filter((t) => t.status === 'healthy').length;
@@ -384,7 +416,9 @@ function DentalChartContent() {
           </DialogHeader>
 
           <div className="space-y-3">
-            {treatments.length === 0 ? (
+            {historyLoading ? (
+              <div className="text-sm text-muted-foreground">Loading treatment history...</div>
+            ) : treatmentHistoryItems.length === 0 ? (
               <div className="text-sm text-muted-foreground">No treatment history found for this patient.</div>
             ) : (
               <div className="max-h-[60vh] overflow-auto rounded-md border border-border">
@@ -395,9 +429,9 @@ function DentalChartContent() {
                   <div className="col-span-2">Dentist</div>
                   <div className="col-span-2">Date</div>
                 </div>
-                {treatments.map((t, idx) => (
+                {treatmentHistoryItems.map((t, idx) => (
                   <div key={`${t.toothNumber}-${t.date}-${idx}`} className="grid grid-cols-12 gap-2 px-4 py-3 text-sm border-b border-border last:border-b-0">
-                    <div className="col-span-2 font-medium">#{t.toothNumber}</div>
+                    <div className="col-span-2 font-medium">{t.toothNumber ? `#${t.toothNumber}` : 'N/A'}</div>
                     <div className="col-span-4">{t.title}</div>
                     <div className="col-span-2">
                       <Badge variant="secondary">{t.status}</Badge>

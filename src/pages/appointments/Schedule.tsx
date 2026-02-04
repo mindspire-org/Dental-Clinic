@@ -6,12 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Calendar as CalendarIcon, Clock, Plus, CheckCircle2, AlertCircle, XCircle, Users } from 'lucide-react';
-import { appointmentsApi } from '@/lib/api';
+import { appointmentsApi, dentistsApi } from '@/lib/api';
 
 type Appointment = {
     _id: string;
     patient: { firstName: string; lastName: string; phone?: string };
-    dentist: { firstName: string; lastName: string };
+    dentist: { _id?: string; firstName: string; lastName: string };
     appointmentDate: string;
     startTime: string;
     endTime: string;
@@ -19,10 +19,19 @@ type Appointment = {
     status: string;
 };
 
+type Dentist = {
+    _id: string;
+    firstName?: string;
+    lastName?: string;
+    specialization?: string;
+    isActive?: boolean;
+};
+
 export default function Schedule() {
     const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const [dentists, setDentists] = useState<Dentist[]>([]);
     const [loading, setLoading] = useState(true);
 
     const timeSlots = useMemo(() => {
@@ -38,10 +47,16 @@ export default function Schedule() {
         const load = async () => {
             try {
                 setLoading(true);
-                const res = await appointmentsApi.getAll({ date: selectedDate, limit: 200 });
-                setAppointments(res.data.appointments || []);
+                const [apptsRes, dentistsRes] = await Promise.allSettled([
+                    appointmentsApi.getAll({ date: selectedDate, limit: 200 }),
+                    dentistsApi.getAll({ isActive: true, limit: 200 }),
+                ]);
+
+                setAppointments(apptsRes.status === 'fulfilled' ? (apptsRes.value.data.appointments || []) : []);
+                setDentists(dentistsRes.status === 'fulfilled' ? (dentistsRes.value.data.dentists || []) : []);
             } catch {
                 setAppointments([]);
+                setDentists([]);
             } finally {
                 setLoading(false);
             }
@@ -78,6 +93,34 @@ export default function Schedule() {
         acc[key] = (acc[key] || 0) + 1;
         return acc;
     }, {} as Record<string, number>);
+
+    const onDutyDentists = useMemo(() => {
+        const dentistBusy = new Map<string, boolean>();
+        appointments.forEach((a) => {
+            const id = a.dentist?._id;
+            if (!id) return;
+            const s = normalizeStatus(a.status);
+            if (['scheduled', 'confirmed', 'in_progress'].includes(s)) {
+                dentistBusy.set(id, true);
+            }
+        });
+
+        const list = (dentists || [])
+            .filter((d) => d.isActive !== false)
+            .map((d) => ({
+                ...d,
+                busy: Boolean(dentistBusy.get(d._id)),
+            }))
+            .sort((a: any, b: any) => Number(b.busy) - Number(a.busy));
+
+        return list.slice(0, 4);
+    }, [appointments, dentists]);
+
+    const getInitials = (d: Dentist) => {
+        const f = (d.firstName || '').trim();
+        const l = (d.lastName || '').trim();
+        return `${f ? f[0] : ''}${l ? l[0] : ''}`.toUpperCase() || 'DR';
+    };
 
     const summaryCards = [
         {
@@ -240,20 +283,25 @@ export default function Schedule() {
                                 <CardTitle className="text-base">Doctors On Duty</CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">SM</div>
-                                    <div>
-                                        <p className="text-sm font-medium">Dr. Sarah Mitchell</p>
-                                        <p className="text-xs text-muted-foreground">Ortho • Available</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center font-bold text-xs">JW</div>
-                                    <div>
-                                        <p className="text-sm font-medium">Dr. James Wilson</p>
-                                        <p className="text-xs text-muted-foreground">General • In Surgery</p>
-                                    </div>
-                                </div>
+                                {loading ? (
+                                    <div className="text-sm text-muted-foreground">Loading...</div>
+                                ) : onDutyDentists.length === 0 ? (
+                                    <div className="text-sm text-muted-foreground">No doctors found.</div>
+                                ) : (
+                                    onDutyDentists.map((d: any) => (
+                                        <div key={d._id} className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                                                {getInitials(d)}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-medium">Dr. {`${d.firstName || ''} ${d.lastName || ''}`.trim() || 'Dentist'}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {(d.specialization || 'General')} • {d.busy ? 'Busy' : 'Available'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
                             </CardContent>
                         </Card>
                     </div>

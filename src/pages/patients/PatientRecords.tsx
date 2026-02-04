@@ -26,11 +26,13 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { documentsApi } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface Document {
     _id: string;
     title: string;
     category: string;
+    isFolder?: boolean;
     patient?: {
         firstName: string;
         lastName: string;
@@ -55,8 +57,8 @@ export default function PatientRecords() {
     const fetchRecords = async () => {
         try {
             setLoading(true);
-            const response = await documentsApi.getAll();
-            setRecords(response.data.documents);
+            const response = await documentsApi.getAll({ isFolder: false });
+            setRecords(response.data.documents || []);
         } catch (error) {
             console.error('Error fetching records:', error);
         } finally {
@@ -65,9 +67,15 @@ export default function PatientRecords() {
     };
 
     const handleView = (record: Document) => {
-        if (record.fileUrl) {
-            window.open(record.fileUrl, '_blank');
+        if (record.isFolder) {
+            toast.error('This is a folder');
+            return;
         }
+        if (!record.fileUrl) {
+            toast.error('File not available');
+            return;
+        }
+        window.open(record.fileUrl, '_blank');
     };
 
     const handleExport = () => {
@@ -77,13 +85,15 @@ export default function PatientRecords() {
 
     const getCategoryColor = (category: string) => {
         const colors: Record<string, string> = {
+            'x-ray': 'bg-blue-100 text-blue-800',
             xray: 'bg-blue-100 text-blue-800',
             report: 'bg-green-100 text-green-800',
+            'consent-form': 'bg-purple-100 text-purple-800',
             consent: 'bg-purple-100 text-purple-800',
             prescription: 'bg-orange-100 text-orange-800',
-            general: 'bg-gray-100 text-gray-800',
+            other: 'bg-gray-100 text-gray-800',
         };
-        return colors[category] || colors.general;
+        return colors[String(category || 'other').toLowerCase()] || colors.other;
     };
 
     const filteredRecords = records.filter(record => {

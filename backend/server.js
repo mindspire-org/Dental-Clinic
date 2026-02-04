@@ -63,6 +63,7 @@ app.use('/api/prescriptions', requireModuleAccess('prescriptions'), require('./r
 app.use('/api/billing', requireModuleAccess('billing'), require('./routes/billing.routes'));
 app.use('/api/expenses', require('./routes/expense.routes'));
 app.use('/api/lab-work', requireModuleAccess('lab-work'), require('./routes/labWork.routes'));
+app.use('/api/lab-test-templates', requireModuleAccess('lab-work'), require('./routes/labTestTemplate.routes'));
 app.use('/api/inventory', require('./routes/inventory.routes'));
 app.use('/api/staff', requireModuleAccess('staff'), require('./routes/staff.routes'));
 app.use('/api/dentists', requireModuleAccess('dentists'), require('./routes/dentist.routes'));
